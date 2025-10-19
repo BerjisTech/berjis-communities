@@ -1,0 +1,317 @@
+openapi: 3.0.3
+info:
+  title: Berjis Communities API
+  version: 1.0.0
+  description: Minimal spec to bootstrap clients for Communities service.
+servers:
+  - url: http://communities-api.berjis.test
+paths:
+  /v1/health:
+    get:
+      tags: [health]
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /v1/communities:
+    get:
+      tags: [communities]
+      summary: List communities
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Text search in name/description
+        - in: query
+          name: tag
+          schema: { type: string }
+          description: Filter by hashtag name
+      responses:
+        '200':
+          description: List of communities
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Community' }
+    post:
+      tags: [communities]
+      summary: Create community
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommunityCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Community' }
+  /v1/communities/{id}:
+    get:
+      tags: [communities]
+      summary: Get community by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Community' }
+        '404': { description: Not found }
+  /v1/communities/{id}/join:
+    post:
+      tags: [communities]
+      summary: Join community
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: Joined, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+  /v1/communities/{id}/leave:
+    post:
+      tags: [communities]
+      summary: Leave community
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: Left, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+components:
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        data: {}
+    Community:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        visibility: { type: string, enum: [public, private] }
+        access: { type: string, enum: [free, paid] }
+        hashtags:
+          type: array
+          items: { type: string }
+    CommunityCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        visibility: { type: string, enum: [public, private], default: public }
+        access: { type: string, enum: [free, paid], default: free }
+        hashtags:
+          type: array
+          items: { type: string }
+    CommunityUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        visibility: { type: string, enum: [public, private] }
+        access: { type: string, enum: [free, paid] }
+    Channel:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+    ChannelCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+    Post:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        title: { type: string }
+        body: { type: string }
+        user_id: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+    PostCreate:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        body: { type: string }
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    patch:
+      tags: [communities]
+      summary: Update community
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommunityUpdate' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Community' }
+    delete:
+      tags: [communities]
+      summary: Delete community
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+  /v1/communities/{id}/channels:
+    get:
+      tags: [channels]
+      summary: List channels in community
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Channel' }
+    post:
+      tags: [channels]
+      summary: Create channel in community
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChannelCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+
+  /v1/channels/{channelId}:
+    get:
+      tags: [channels]
+      summary: Get channel
+      parameters:
+        - in: path
+          name: channelId
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/channels/{channelId}/posts:
+    get:
+      tags: [posts]
+      summary: List posts in channel
+      parameters:
+        - in: path
+          name: channelId
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Post' }
+    post:
+      tags: [posts]
+      summary: Create post in channel
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: channelId
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PostCreate' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
