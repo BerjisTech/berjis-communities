@@ -1,0 +1,31 @@
+
+  <header class="bg-blue-600 text-white px-6 py-4"><h1 class="m-0 text-xl font-semibold">Create Post</h1></header>
+  <main class="max-w-3xl mx-auto p-6">
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" style="display:grid;gap:12px">
+      <input formControlName="title" placeholder="Title (optional for text-only)" style="padding:8px;border:1px solid #e5e7eb;border-radius:6px">
+      <div style="position:relative">
+        <textarea #bodyArea rows="6" formControlName="body" (input)="onBodyInput($event)" placeholder="Write something... type # to add tags" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px"></textarea>
+        <div *ngIf="(suggest$ | async) as sugg" style="position:absolute;left:8px;right:8px;bottom:-2px;transform:translateY(100%);background:white;border:1px solid #e5e7eb;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.06);z-index:10" >
+          <ng-container *ngIf="sugg.length">
+            <div *ngFor="let s of sugg" (click)="insertTag(s.name)" style="padding:6px 8px;display:flex;justify-content:space-between;cursor:pointer">
+              <span>#{{s.name}}</span>
+              <small style="color:#6b7280">{{s.count}}</small>
+            </div>
+          </ng-container>
+        </div>
+      </div>
+      <div *ngIf="!communityId && !groupId" style="display:grid;grid-template-columns:1fr;gap:12px">
+        <label style="display:flex;gap:8px;align-items:center">
+          <span>Visibility</span>
+          <select formControlName="visibility" style="padding:8px;border:1px solid #e5e7eb;border-radius:6px">
+            <option value="public">Public</option>
+            <option value="private">Private</option>
+          </select>
+        </label>
+      </div>
+      <button type="submit" [disabled]="(state$ | async)?.submitting" style="background:#0b5fff;color:#fff;padding:10px 14px;border:none;border-radius:6px">Post</button>
+      <div *ngIf="(state$ | async)?.message as m" style="color:#065f46">{{m}}</div>
+      <div *ngIf="(state$ | async)?.error as e" style="color:#991b1b">{{e}}</div>
+    </form>
+  </main>
+  

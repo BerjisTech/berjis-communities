@@ -1,0 +1,95 @@
+import { Component, ChangeDetectionStrategy, Input, ViewChild, ElementRef } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ReactiveFormsModule, FormBuilder } from '@angular/forms';
+import { ApiService } from './api.service';
+import { BehaviorSubject, Observable, Subject, catchError, debounceTime, distinctUntilChanged, filter, map, of, shareReplay, switchMap } from 'rxjs';
+
+@Component({
+  selector: 'app-post-create',
+  standalone: true,
+  imports: [CommonModule, ReactiveFormsModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: './post-create.component.html'
+})
+export class PostCreateComponent {
+  @Input() communityId?: number;
+  @Input() groupId?: number;
+  @ViewChild('bodyArea') bodyArea?: ElementRef<HTMLTextAreaElement>;
+
+  form = this.fb.group({
+    title: [''],
+    body: [''],
+    visibility: ['public'],
+  });
+
+  private submit$?: ReturnType<ApiService['createPostGeneric']>;
+
+  state$ = of({ submitting: false, message: '', error: '' }).pipe(shareReplay(1));
+
+  private bodyChange$ = new Subject<string>();
+  suggest$: Observable<{ name: string; count: number }[]> = this.bodyChange$.pipe(
+    map(v => this.currentTagQuery(v)),
+    filter(q => q.length >= 1),
+    debounceTime(150),
+    distinctUntilChanged(),
+    switchMap(q => this.api.tagsSuggest(q).pipe(
+      map(r => r.data || []),
+      catchError(() => of([]))
+    )),
+    shareReplay(1)
+  );
+
+  constructor(private fb: FormBuilder, private api: ApiService) {}
+
+  onBodyInput(ev: Event) {
+    const val = (ev.target as HTMLTextAreaElement).value;
+    this.bodyChange$.next(val);
+  }
+
+  private currentTagQuery(text: string): string {
+    // Get word at cursor starting with '#'
+    const el = this.bodyArea?.nativeElement;
+    const pos = el ? el.selectionStart || text.length : text.length;
+    const left = text.slice(0, pos);
+    const match = left.match(/(^|\s)#([\w-]{1,32})$/);
+    return match ? match[2] : '';
+  }
+
+  insertTag(tag: string) {
+    const el = this.bodyArea?.nativeElement;
+    const text = this.form.value.body || '';
+    if (!el) { this.form.patchValue({ body: `${text} #${tag}`.trim() }); return; }
+    const pos = el.selectionStart || text.length;
+    const start = text.slice(0, pos);
+    const end = text.slice(pos);
+    const replaced = start.replace(/#([\w-]{0,32})$/, `#${tag}`);
+    const next = replaced + end;
+    this.form.patchValue({ body: next });
+    // Move cursor to after inserted tag
+    queueMicrotask(() => {
+      const npos = replaced.length;
+      el.setSelectionRange(npos, npos);
+      el.focus();
+    });
+  }
+
+  onSubmit() {
+    const v = this.form.value;
+    // Extract hashtags from body content
+    const body = v.body || '';
+    const tags = Array.from(new Set((body.match(/(^|\s)#([\w-]+)/g) || []).map(s => s.trim().replace(/^#/, '').toLowerCase())));
+    const payload: any = { title: v.title || '', body, hashtags: tags };
+    if (this.communityId) payload.community_id = this.communityId;
+    if (this.groupId) payload.group_id = this.groupId;
+    if (!this.communityId && !this.groupId) payload.visibility = (v.visibility as any) || 'public';
+
+    this.state$ = of({ submitting: true, message: '', error: '' }).pipe(
+      switchMap(() => this.api.createPostGeneric(payload).pipe(
+        map(() => ({ submitting: false, message: 'Posted successfully', error: '' })),
+        catchError((err) => of({ submitting: false, message: '', error: err?.error?.message || 'Failed to post' }))
+      )),
+      shareReplay(1)
+    );
+  }
+}
+

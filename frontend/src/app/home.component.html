@@ -1,0 +1,51 @@
+<header class="bg-blue-600 text-white px-6 py-4">
+  <h1 class="m-0 text-xl font-semibold">Home</h1>
+  <nav class="mt-1 space-x-3">
+    <a class="text-white hover:underline" href="/communities">Communities</a>
+    <a class="text-white hover:underline" href="/explore">Explore</a>
+    <a class="text-white hover:underline" href="/create">New Post</a>
+  </nav>
+</header>
+<main class="max-w-4xl mx-auto p-6">
+  <section class="mb-4">
+    <h3>Stories</h3>
+    <div>Coming soon (24h status with green avatar ring)</div>
+  </section>
+  <section>
+    <h3>Public Feed</h3>
+    <div *ngIf="loading">Loading…</div>
+    <article *ngFor="let p of posts" class="border border-gray-200 rounded-lg p-3 my-2 bg-white dark:bg-slate-800">
+      <div class="flex items-center gap-3 mb-2">
+        <div class="relative group" (mouseenter)="hoverUser=p.user_id" (mouseleave)="hoverUser=0">
+          <a [href]="'/u/'+(userName(p.user_id) || ('u'+p.user_id))" class="block">
+            <img [src]="avatarUrl(p.user_id)" alt="avatar" class="h-8 w-8 rounded-full object-cover bg-gray-200" />
+          </a>
+          <div *ngIf="hoverUser===p.user_id" class="absolute z-20 mt-2 p-3 w-64 border border-gray-200 rounded-lg bg-white shadow-lg dark:bg-slate-900">
+            <div class="flex items-center gap-2 mb-2">
+              <img [src]="avatarUrl(p.user_id)" class="h-10 w-10 rounded-full object-cover bg-gray-200" />
+              <div>
+                <div class="font-semibold">{{ fullName(p.user_id) || userName(p.user_id) || ('u'+p.user_id) }}</div>
+                <div class="text-sm text-gray-500">&#64;{{ userName(p.user_id) || ('u'+p.user_id) }}</div>
+              </div>
+            </div>
+            <div class="text-sm mb-2" *ngIf="bio(p.user_id)">{{ bio(p.user_id) }}</div>
+            <div class="text-xs text-gray-600 flex gap-3">
+              <span>{{ followers(p.user_id) }} followers</span>
+              <span>{{ following(p.user_id) }} following</span>
+              <span>{{ postsCount(p.user_id) }} posts</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-col">
+          <a [href]="'/u/'+(userName(p.user_id) || ('u'+p.user_id))" class="font-medium hover:underline">{{ userName(p.user_id) || ('u'+p.user_id) }}</a>
+          <span class="text-xs text-gray-500">{{ timeAgo(p.created_at) }}</span>
+        </div>
+      </div>
+      <div class="font-semibold" [innerText]="p.title"></div>
+      <div [innerHTML]="render(p.body)"></div>
+      <small *ngIf="p.community_slug">in <a [href]="'/c/'+p.community_slug">/c/{{p.community_slug}}</a></small>
+      <small *ngIf="p.group_slug">in <a [href]="'/g/'+p.group_slug">/g/{{p.group_slug}}</a></small>
+    </article>
+  </section>
+</main>
+

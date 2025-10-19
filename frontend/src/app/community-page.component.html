@@ -1,0 +1,33 @@
+
+  <header class="bg-blue-600 text-white px-6 py-4"><h1 class="m-0 text-xl font-semibold">Community</h1></header>
+  <main class="max-w-4xl mx-auto p-6">
+    <ng-container *ngIf="vm$ | async as vm">
+      <div *ngIf="vm.loading">Loading…</div>
+      <section *ngIf="!vm.loading && vm.community">
+        <h2>/c/{{vm.community.slug}}</h2>
+        <p>{{vm.community.description}}</p>
+        <div style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap">
+          <button (click)="join(vm.community.id)" [disabled]="vm.community.current_user_banned" style="background:#0b5fff;color:#fff;padding:6px 10px;border:none;border-radius:6px">Join</button>
+          <a href="/create" style="color:#0b5fff;padding:6px 10px">Open Composer</a>
+        </div>
+        <section *ngIf="!vm.community.current_user_banned" style="margin:16px 0">
+          <app-post-create [communityId]="vm.community.id"></app-post-create>
+        </section>
+        <details *ngIf="vm.community.current_user_role === 'owner' || vm.community.current_user_role === 'admin'">
+          <summary>Admin Tools</summary>
+          <div style="margin-top:8px;display:grid;gap:8px;max-width:420px">
+            <input #userIdInput type="number" placeholder="User ID" style="padding:8px;border:1px solid #e5e7eb;border-radius:6px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button (click)="setRole(vm.community.id, userIdInput.value, 'admin')" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px">Make Admin</button>
+              <button (click)="setRole(vm.community.id, userIdInput.value, 'member')" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px">Revoke Admin</button>
+              <button (click)="ban(vm.community.id, userIdInput.value, 'ban')" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;color:#991b1b">Ban</button>
+              <button (click)="ban(vm.community.id, userIdInput.value, 'unban')" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;color:#065f46">Unban</button>
+            </div>
+            <div style="color:#991b1b" *ngIf="vm.error">{{vm.error}}</div>
+            <div style="color:#065f46" *ngIf="vm.message">{{vm.message}}</div>
+          </div>
+        </details>
+      </section>
+    </ng-container>
+  </main>
+  

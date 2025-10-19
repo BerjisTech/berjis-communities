@@ -112,6 +112,254 @@ paths:
       responses:
         '200': { description: Left, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
 
+  /v1/communities/by-slug/{slug}:
+    get:
+      tags: [communities]
+      summary: Get community by slug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommunityContext' }
+
+  /v1/communities/{id}/members/{userId}/role:
+    post:
+      tags: [communities]
+      summary: Set community member role
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleUpdate' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/communities/{id}/bans/{userId}:
+    post:
+      tags: [communities]
+      summary: Ban or unban user in community
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BanAction' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/groups:
+    get:
+      tags: [groups]
+      summary: List groups
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Group' }
+    post:
+      tags: [groups]
+      summary: Create group
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupCreate' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/groups/{id}:
+    get:
+      tags: [groups]
+      summary: Get group by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/groups/by-slug/{slug}:
+    get:
+      tags: [groups]
+      summary: Get group by slug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/GroupContext' }
+
+  /v1/groups/{id}/join:
+    post:
+      tags: [groups]
+      summary: Join group
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/groups/{id}/members/{userId}/role:
+    post:
+      tags: [groups]
+      summary: Set group member role
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleUpdate' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/groups/{id}/bans/{userId}:
+    post:
+      tags: [groups]
+      summary: Ban or unban user in group
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BanAction' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/posts:
+    post:
+      tags: [posts]
+      summary: Create generic post
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PostGenericCreate' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/feed/public:
+    get:
+      tags: [posts]
+      summary: Public feed
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/explore:
+    get:
+      tags: [posts]
+      summary: Explore by tag
+      parameters:
+        - in: query
+          name: tag
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/tags/suggest:
+    get:
+      tags: [tags]
+      summary: Suggest hashtags by prefix
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/users/mini:
+    get:
+      tags: [users]
+      summary: Fetch mini user profiles by IDs (proxy to Core API)
+      parameters:
+        - in: query
+          name: ids
+          required: true
+          description: Comma-separated numeric user IDs
+          schema: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
 components:
   schemas:
     ApiResponse:
@@ -151,6 +399,24 @@ components:
         description: { type: string }
         visibility: { type: string, enum: [public, private] }
         access: { type: string, enum: [free, paid] }
+    CommunityContext:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        visibility: { type: string, enum: [public, private] }
+        access: { type: string, enum: [free, paid] }
+        hashtags:
+          type: array
+          items: { type: string }
+        current_user_role:
+          type: string
+          description: Role of current user in community (empty if none)
+        current_user_banned:
+          type: boolean
+          description: Whether current user is banned in this community
     Channel:
       type: object
       properties:
@@ -177,6 +443,65 @@ components:
       properties:
         title: { type: string }
         body: { type: string }
+    RoleUpdate:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          description: Role to set
+    BanAction:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [ban, unban]
+        reason: { type: string }
+    Group:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        visibility: { type: string, enum: [public, private] }
+    GroupContext:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        visibility: { type: string, enum: [public, private] }
+        current_user_role:
+          type: string
+          description: Role of current user in group (empty if none)
+        current_user_banned:
+          type: boolean
+          description: Whether current user is banned in this group
+    GroupCreate:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        visibility: { type: string, enum: [public, private], default: public }
+    PostGenericCreate:
+      type: object
+      properties:
+        title: { type: string }
+        body: { type: string }
+        kind: { type: string, enum: [post, repost, quote, reply, story], default: post }
+        visibility: { type: string, enum: [public, private], default: public }
+        community_id: { type: integer, format: int64 }
+        channel_id: { type: integer, format: int64 }
+        group_id: { type: integer, format: int64 }
+        parent_post_id: { type: integer, format: int64 }
+        hashtags:
+          type: array
+          items: { type: string }
   securitySchemes:
     bearerAuth:
       type: http

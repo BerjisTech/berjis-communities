@@ -1,0 +1,10 @@
+
+  <header class="bg-blue-600 text-white px-6 py-4"><h1 class="m-0 text-xl font-semibold">Communities</h1></header>
+  <main class="max-w-4xl mx-auto p-6">
+    <div *ngIf="loading">Loading…</div>
+    <div *ngFor="let c of items" style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin:8px 0">
+      <a [href]="'/c/'+c.slug"><strong>/c/{{c.slug}}</strong></a>
+      <div>{{c.description}}</div>
+    </div>
+  </main>
+  

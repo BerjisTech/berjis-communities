@@ -1,0 +1,24 @@
+
+  <header class="bg-blue-600 text-white px-6 py-4"><h1 class="m-0 text-xl font-semibold">Create Community</h1></header>
+  <main class="max-w-3xl mx-auto p-6">
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" style="display:grid;gap:12px">
+      <input formControlName="name" placeholder="Name" style="padding:8px;border:1px solid #e5e7eb;border-radius:6px">
+      <input formControlName="slug" placeholder="Slug" style="padding:8px;border:1px solid #e5e7eb;border-radius:6px">
+      <textarea rows="4" formControlName="description" placeholder="Description" style="padding:8px;border:1px solid #e5e7eb;border-radius:6px"></textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <select formControlName="visibility" style="padding:8px;border:1px solid #e5e7eb;border-radius:6px">
+          <option value="public">Public</option>
+          <option value="private">Private</option>
+        </select>
+        <select formControlName="access" style="padding:8px;border:1px solid #e5e7eb;border-radius:6px">
+          <option value="free">Free</option>
+          <option value="paid">Paid</option>
+        </select>
+      </div>
+      <input formControlName="hashtags" placeholder="#tags (comma separated)" style="padding:8px;border:1px solid #e5e7eb;border-radius:6px">
+      <button type="submit" [disabled]="(state$ | async)?.submitting" style="background:#0b5fff;color:#fff;padding:10px 14px;border:none;border-radius:6px">Create</button>
+      <div *ngIf="(state$ | async)?.message as m" style="color:#065f46">{{m}}</div>
+      <div *ngIf="(state$ | async)?.error as e" style="color:#991b1b">{{e}}</div>
+    </form>
+  </main>
+  

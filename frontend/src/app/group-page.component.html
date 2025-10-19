@@ -1,0 +1,21 @@
+
+  <header class="bg-blue-600 text-white px-6 py-4"><h1 class="m-0 text-xl font-semibold">Group</h1></header>
+  <main class="max-w-4xl mx-auto p-6">
+    <ng-container *ngIf="vm$ | async as vm">
+      <div *ngIf="vm.loading">Loading…</div>
+      <section *ngIf="!vm.loading && vm.group">
+        <h2>/g/{{vm.group.slug}}</h2>
+        <p>{{vm.group.description}}</p>
+        <div style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap">
+          <button (click)="join(vm.group.id)" [disabled]="vm.group.current_user_banned" style="background:#0b5fff;color:#fff;padding:6px 10px;border:none;border-radius:6px">Join</button>
+          <a href="/create" style="color:#0b5fff;padding:6px 10px">Open Composer</a>
+        </div>
+        <section *ngIf="!vm.group.current_user_banned" style="margin:16px 0">
+          <app-post-create [groupId]="vm.group.id"></app-post-create>
+        </section>
+        <div style="color:#991b1b" *ngIf="vm.error">{{vm.error}}</div>
+        <div style="color:#065f46" *ngIf="vm.message">{{vm.message}}</div>
+      </section>
+    </ng-container>
+  </main>
+  

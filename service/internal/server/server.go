@@ -2,6 +2,7 @@ package server
 
 import (
     "database/sql"
+    "io"
     "net/http"
     "strconv"
     "strings"
@@ -69,6 +70,9 @@ func New(opts Options) *fiber.App {
     app.Delete("/v1/communities/:id", requireAuth, func(c *fiber.Ctx) error { return deleteCommunity(c, opts.DB) })
     app.Post("/v1/communities/:id/join", requireAuth, func(c *fiber.Ctx) error { return joinCommunity(c, opts.DB, opts.CoreAPIBase) })
     app.Post("/v1/communities/:id/leave", requireAuth, func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"success": true, "message": "left"}) })
+    // Admin: roles and bans (server enforces permissions)
+    app.Post("/v1/communities/:id/members/:userId/role", requireAuth, func(c *fiber.Ctx) error { return setCommunityMemberRole(c, opts.DB) })
+    app.Post("/v1/communities/:id/bans/:userId", requireAuth, func(c *fiber.Ctx) error { return communityBanAction(c, opts.DB) })
 
     // Channels
     app.Get("/v1/communities/:id/channels", func(c *fiber.Ctx) error { return listChannels(c, opts.DB) })
@@ -79,10 +83,16 @@ func New(opts Options) *fiber.App {
     app.Get("/v1/channels/:channelId/posts", func(c *fiber.Ctx) error { return listPosts(c, opts.DB) })
     app.Post("/v1/channels/:channelId/posts", requireAuth, func(c *fiber.Ctx) error { return createPost(c, opts.DB) })
 
+    // Tags suggest
+    app.Get("/v1/tags/suggest", func(c *fiber.Ctx) error { return tagsSuggest(c, opts.DB) })
+
     // Generic posts (standalone or tied to group/community/channel)
     app.Post("/v1/posts", requireAuth, func(c *fiber.Ctx) error { return createGenericPost(c, opts.DB) })
     app.Get("/v1/feed/public", func(c *fiber.Ctx) error { return publicFeed(c, opts.DB) })
     app.Get("/v1/explore", func(c *fiber.Ctx) error { return exploreByTag(c, opts.DB) })
+
+    // Users mini proxy (to Core API)
+    app.Get("/v1/users/mini", func(c *fiber.Ctx) error { return usersMiniProxy(c, opts.CoreAPIBase) })
 
     // Groups
     app.Get("/v1/groups", func(c *fiber.Ctx) error { return listGroups(c, opts.DB) })
@@ -90,6 +100,8 @@ func New(opts Options) *fiber.App {
     app.Get("/v1/groups/:id", func(c *fiber.Ctx) error { return getGroup(c, opts.DB) })
     app.Get("/v1/groups/by-slug/:slug", func(c *fiber.Ctx) error { return getGroupBySlug(c, opts.DB) })
     app.Post("/v1/groups/:id/join", requireAuth, func(c *fiber.Ctx) error { return joinGroup(c, opts.DB) })
+    app.Post("/v1/groups/:id/members/:userId/role", requireAuth, func(c *fiber.Ctx) error { return setGroupMemberRole(c, opts.DB) })
+    app.Post("/v1/groups/:id/bans/:userId", requireAuth, func(c *fiber.Ctx) error { return groupBanAction(c, opts.DB) })
 
     return app
 }
@@ -233,7 +245,10 @@ func joinCommunity(c *fiber.Ctx, db *sqlx.DB, coreAPIBase string) error {
         return c.Status(fiber.StatusPaymentRequired).JSON(fiber.Map{"success": false, "message": "payment required"})
     }
 
-    // Free + public: add membership
+    // Free + public: add membership (if not banned)
+    if isBannedFromCommunity(db, id, userIDFromContext(c)) {
+        return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this community"})
+    }
     if _, err := db.Exec("INSERT INTO community_members(community_id, user_id, role) VALUES ($1,$2,'member') ON CONFLICT DO NOTHING", id, userIDFromContext(c)); err != nil {
         return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "join failed"})
     }
@@ -274,7 +289,13 @@ func getCommunityBySlug(c *fiber.Ctx, db *sqlx.DB) error {
     }
     tags, _ := fetchCommunityTags(db, cm.ID)
     cm.Hashtags = tags
-    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": cm})
+    var role string
+    _ = db.Get(&role, "SELECT role FROM community_members WHERE community_id=$1 AND user_id=$2", cm.ID, userIDFromContext(c))
+    banned := isBannedFromCommunity(db, cm.ID, userIDFromContext(c))
+    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": fiber.Map{
+        "id": cm.ID, "name": cm.Name, "slug": cm.Slug, "description": cm.Description, "visibility": cm.Visibility, "access": cm.Access, "hashtags": cm.Hashtags,
+        "current_user_role": role, "current_user_banned": banned,
+    }})
 }
 
 // Create generic post: standalone or in a group/community/channel
@@ -283,6 +304,7 @@ func createGenericPost(c *fiber.Ctx, db *sqlx.DB) error {
         Title         string   `json:"title"`
         Body          string   `json:"body"`
         Kind          string   `json:"kind"`
+        Visibility    string   `json:"visibility"`
         CommunityID   *int64   `json:"community_id"`
         ChannelID     *int64   `json:"channel_id"`
         GroupID       *int64   `json:"group_id"`
@@ -295,9 +317,20 @@ func createGenericPost(c *fiber.Ctx, db *sqlx.DB) error {
     }
     kind := strings.ToLower(strings.TrimSpace(body.Kind))
     if kind == "" { kind = "post" }
+    vis := strings.ToLower(strings.TrimSpace(body.Visibility))
+    if vis == "" { vis = "public" }
+    if vis != "public" && vis != "private" { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid visibility"}) }
 
     // Visibility enforcement for private targets
     if body.CommunityID != nil {
+        if isBannedFromCommunity(db, *body.CommunityID, userIDFromContext(c)) {
+            return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this community"})
+        }
+        // New: always require membership for posting into a community (public or private)
+        if !isMember(db, *body.CommunityID, userIDFromContext(c)) {
+            return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "membership required"})
+        }
+        // Keep private visibility check for defense in depth
         if private, err := isCommunityPrivate(db, *body.CommunityID); err == nil && private {
             if !isMember(db, *body.CommunityID, userIDFromContext(c)) {
                 return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "membership required"})
@@ -305,6 +338,9 @@ func createGenericPost(c *fiber.Ctx, db *sqlx.DB) error {
         }
     }
     if body.GroupID != nil {
+        if isBannedFromGroup(db, *body.GroupID, userIDFromContext(c)) {
+            return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this group"})
+        }
         if private, err := isGroupPrivate(db, *body.GroupID); err == nil && private {
             if !isGroupMember(db, *body.GroupID, userIDFromContext(c)) {
                 return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "membership required"})
@@ -318,12 +354,12 @@ func createGenericPost(c *fiber.Ctx, db *sqlx.DB) error {
 
     var id int64
     if kind == "story" {
-        err = tx.QueryRowx("INSERT INTO posts (community_id, channel_id, group_id, user_id, title, body, kind, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7, now() + interval '24 hours') RETURNING id",
-            body.CommunityID, body.ChannelID, body.GroupID, userIDFromContext(c), body.Title, body.Body, kind,
+        err = tx.QueryRowx("INSERT INTO posts (community_id, channel_id, group_id, user_id, title, body, kind, visibility, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now() + interval '24 hours') RETURNING id",
+            body.CommunityID, body.ChannelID, body.GroupID, userIDFromContext(c), body.Title, body.Body, kind, vis,
         ).Scan(&id)
     } else {
-        err = tx.QueryRowx("INSERT INTO posts (community_id, channel_id, group_id, user_id, title, body, kind, parent_post_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
-            body.CommunityID, body.ChannelID, body.GroupID, userIDFromContext(c), body.Title, body.Body, kind, body.ParentPostID,
+        err = tx.QueryRowx("INSERT INTO posts (community_id, channel_id, group_id, user_id, title, body, kind, visibility, parent_post_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id",
+            body.CommunityID, body.ChannelID, body.GroupID, userIDFromContext(c), body.Title, body.Body, kind, vis, body.ParentPostID,
         ).Scan(&id)
     }
     if err != nil { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "create failed"}) }
@@ -358,6 +394,7 @@ func publicFeed(c *fiber.Ctx, db *sqlx.DB) error {
       LEFT JOIN communities c ON c.id = p.community_id
       LEFT JOIN groups g ON g.id = p.group_id
       WHERE (p.expires_at IS NULL OR now() <= p.expires_at)
+        AND p.visibility = 'public'
         AND (p.kind IN ('post','repost','quote','story'))
         AND (
               (p.community_id IS NULL AND p.group_id IS NULL)
@@ -378,7 +415,7 @@ func publicFeed(c *fiber.Ctx, db *sqlx.DB) error {
         var communitySlug, groupSlug sql.NullString
         _ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt, &communityID, &communitySlug, &groupID, &groupSlug)
         items = append(items, fiber.Map{
-            "id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.Int64, "kind": kind.String,
+            "id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.Int64, "kind": kind.String, "created_at": createdAt.String,
             "community_id": communityID.Int64, "community_slug": communitySlug.String,
             "group_id": groupID.Int64, "group_slug": groupSlug.String,
         })
@@ -398,6 +435,7 @@ func exploreByTag(c *fiber.Ctx, db *sqlx.DB) error {
       LEFT JOIN groups g ON g.id = p.group_id
       WHERE LOWER(t.name) = LOWER($1)
         AND (p.expires_at IS NULL OR now() <= p.expires_at)
+        AND p.visibility = 'public'
         AND (
               (p.community_id IS NULL AND p.group_id IS NULL)
            OR (p.community_id IS NOT NULL AND c.visibility = 'public')
@@ -417,6 +455,28 @@ func exploreByTag(c *fiber.Ctx, db *sqlx.DB) error {
         posts = append(posts, fiber.Map{"id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.Int64, "kind": kind.String})
     }
     return c.JSON(fiber.Map{"success": true, "message": "ok", "data": posts})
+}
+
+func usersMiniProxy(c *fiber.Ctx, coreAPIBase string) error {
+    ids := strings.TrimSpace(c.Query("ids"))
+    if ids == "" { return c.JSON(fiber.Map{"success": true, "message": "ok", "data": []any{} }) }
+    req, err := http.NewRequest("GET", strings.TrimRight(coreAPIBase, "/")+"/v1/users/mini?ids="+urlQueryEscape(ids), nil)
+    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "proxy error"}) }
+    if authz := c.Get("Authorization"); authz != "" { req.Header.Set("Authorization", authz) }
+    if cookie := c.Get("Cookie"); cookie != "" { req.Header.Set("Cookie", cookie) }
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil { return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"success": false, "message": "core unavailable"}) }
+    defer resp.Body.Close()
+    c.Set("Content-Type", resp.Header.Get("Content-Type"))
+    c.Status(resp.StatusCode)
+    _, _ = io.Copy(c, resp.Body)
+    return nil
+}
+
+func urlQueryEscape(s string) string {
+    r := strings.ReplaceAll(s, " ", "+")
+    r = strings.ReplaceAll(r, "\n", "")
+    return r
 }
 
 func listGroups(c *fiber.Ctx, db *sqlx.DB) error {
@@ -472,12 +532,25 @@ func getGroupBySlug(c *fiber.Ctx, db *sqlx.DB) error {
         if err == sql.ErrNoRows { return c.SendStatus(fiber.StatusNotFound) }
         return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
     }
-    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": g})
+    var role string
+    _ = db.Get(&role, "SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2", g.ID, userIDFromContext(c))
+    banned := false
+    // if group_bans table exists, check ban; ignore error if not
+    if db != nil {
+        banned = isBannedFromGroup(db, g.ID, userIDFromContext(c))
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": fiber.Map{
+        "id": g.ID, "name": g.Name, "slug": g.Slug, "description": g.Description, "visibility": g.Visibility,
+        "current_user_role": role, "current_user_banned": banned,
+    }})
 }
 
 func joinGroup(c *fiber.Ctx, db *sqlx.DB) error {
     id, err := strconv.ParseInt(c.Params("id"), 10, 64)
     if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    if isBannedFromGroup(db, id, userIDFromContext(c)) {
+        return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this group"})
+    }
     var vis string
     if err := db.Get(&vis, "SELECT visibility FROM groups WHERE id=$1", id); err != nil {
         if err == sql.ErrNoRows { return c.SendStatus(fiber.StatusNotFound) }
@@ -501,6 +574,69 @@ func isGroupMember(db *sqlx.DB, groupID, userID int64) bool {
     var exists bool
     _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2)", groupID, userID)
     return exists
+}
+
+// Group bans and admin actions
+func isBannedFromGroup(db *sqlx.DB, groupID, userID int64) bool {
+    if userID == 0 { return false }
+    var exists bool
+    _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_bans WHERE group_id=$1 AND user_id=$2)", groupID, userID)
+    return exists
+}
+
+func setGroupMemberRole(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    targetUserID, err := strconv.ParseInt(c.Params("userId"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    var body struct{ Role string `json:"role"` }
+    if err := c.BodyParser(&body); err != nil { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid json"}) }
+    role := strings.ToLower(strings.TrimSpace(body.Role))
+    if role != "admin" && role != "mod" && role != "member" {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid role"})
+    }
+    var actorRole string
+    _ = db.Get(&actorRole, "SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2", id, userIDFromContext(c))
+    if actorRole != "owner" && actorRole != "admin" {
+        return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "forbidden"})
+    }
+    var targetRole string
+    _ = db.Get(&targetRole, "SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2", id, targetUserID)
+    if targetRole == "owner" {
+        return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "cannot change owner via this endpoint"})
+    }
+    if _, err := db.Exec("UPDATE group_members SET role=$1 WHERE group_id=$2 AND user_id=$3", role, id, targetUserID); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "update failed"})
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "role updated"})
+}
+
+func groupBanAction(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    targetUserID, err := strconv.ParseInt(c.Params("userId"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    var body struct{ Action string `json:"action"`; Reason string `json:"reason"` }
+    if err := c.BodyParser(&body); err != nil { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid json"}) }
+    action := strings.ToLower(strings.TrimSpace(body.Action))
+    if action != "ban" && action != "unban" {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid action"})
+    }
+    var actorRole string
+    _ = db.Get(&actorRole, "SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2", id, userIDFromContext(c))
+    if actorRole != "owner" && actorRole != "admin" {
+        return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "forbidden"})
+    }
+    if action == "ban" {
+        if _, err := db.Exec("INSERT INTO group_bans(group_id, user_id, reason) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", id, targetUserID, strings.TrimSpace(body.Reason)); err != nil {
+            return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "ban failed"})
+        }
+        return c.JSON(fiber.Map{"success": true, "message": "banned"})
+    }
+    if _, err := db.Exec("DELETE FROM group_bans WHERE group_id=$1 AND user_id=$2", id, targetUserID); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "unban failed"})
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "unbanned"})
 }
 
 func updateCommunity(c *fiber.Ctx, db *sqlx.DB) error {
@@ -624,6 +760,9 @@ func createPost(c *fiber.Ctx, db *sqlx.DB) error {
         if err == sql.ErrNoRows { return c.SendStatus(fiber.StatusNotFound) }
         return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
     }
+    if isBannedFromCommunity(db, communityID, userIDFromContext(c)) {
+        return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this community"})
+    }
     if !isMember(db, communityID, userIDFromContext(c)) {
         return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "membership required"})
     }
@@ -649,6 +788,97 @@ func isMember(db *sqlx.DB, communityID, userID int64) bool {
     var exists bool
     _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_members WHERE community_id=$1 AND user_id=$2)", communityID, userID)
     return exists
+}
+
+func tagsSuggest(c *fiber.Ctx, db *sqlx.DB) error {
+    q := strings.TrimSpace(c.Query("q"))
+    if q == "" { return c.JSON(fiber.Map{"success": true, "message": "ok", "data": []any{} }) }
+    limit := 10
+    if v := strings.TrimSpace(c.Query("limit")); v != "" { if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 50 { limit = n } }
+    rows, err := db.Queryx(`
+      SELECT t.name, COUNT(pt.post_id) AS usage
+      FROM tags t
+      LEFT JOIN post_tags pt ON pt.tag_id = t.id
+      WHERE LOWER(t.name) LIKE LOWER($1 || '%')
+      GROUP BY t.id
+      ORDER BY usage DESC, t.name ASC
+      LIMIT $2
+    `, q, limit)
+    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
+    defer rows.Close()
+    items := []map[string]any{}
+    for rows.Next() {
+        var name string
+        var usage int64
+        _ = rows.Scan(&name, &usage)
+        items = append(items, fiber.Map{"name": name, "count": usage})
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": items})
+}
+
+func isBannedFromCommunity(db *sqlx.DB, communityID, userID int64) bool {
+    if userID == 0 { return false }
+    var exists bool
+    _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_bans WHERE community_id=$1 AND user_id=$2)", communityID, userID)
+    return exists
+}
+
+func setCommunityMemberRole(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    targetUserID, err := strconv.ParseInt(c.Params("userId"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    var body struct{ Role string `json:"role"` }
+    if err := c.BodyParser(&body); err != nil { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid json"}) }
+    role := strings.ToLower(strings.TrimSpace(body.Role))
+    if role != "admin" && role != "member" {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid role"})
+    }
+    // Permission: only owner or admin can modify roles
+    var actorRole string
+    _ = db.Get(&actorRole, "SELECT role FROM community_members WHERE community_id=$1 AND user_id=$2", id, userIDFromContext(c))
+    if actorRole != "owner" && actorRole != "admin" {
+        return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "forbidden"})
+    }
+    // Prevent demoting owner via this endpoint
+    var targetRole string
+    _ = db.Get(&targetRole, "SELECT role FROM community_members WHERE community_id=$1 AND user_id=$2", id, targetUserID)
+    if targetRole == "owner" {
+        return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "cannot change owner via this endpoint"})
+    }
+    if _, err := db.Exec("UPDATE community_members SET role=$1 WHERE community_id=$2 AND user_id=$3", role, id, targetUserID); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "update failed"})
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "role updated"})
+}
+
+func communityBanAction(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    targetUserID, err := strconv.ParseInt(c.Params("userId"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    var body struct{ Action string `json:"action"`; Reason string `json:"reason"` }
+    if err := c.BodyParser(&body); err != nil { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid json"}) }
+    action := strings.ToLower(strings.TrimSpace(body.Action))
+    if action != "ban" && action != "unban" {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid action"})
+    }
+    // Permission: only owner/admin can ban
+    var actorRole string
+    _ = db.Get(&actorRole, "SELECT role FROM community_members WHERE community_id=$1 AND user_id=$2", id, userIDFromContext(c))
+    if actorRole != "owner" && actorRole != "admin" {
+        return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "forbidden"})
+    }
+    if action == "ban" {
+        if _, err := db.Exec("INSERT INTO community_bans(community_id, user_id, reason) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", id, targetUserID, strings.TrimSpace(body.Reason)); err != nil {
+            return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "ban failed"})
+        }
+        return c.JSON(fiber.Map{"success": true, "message": "banned"})
+    }
+    if _, err := db.Exec("DELETE FROM community_bans WHERE community_id=$1 AND user_id=$2", id, targetUserID); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "unban failed"})
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "unbanned"})
 }
 
 

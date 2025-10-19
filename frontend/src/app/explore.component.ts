@@ -7,18 +7,7 @@ import { ApiService, linkHashtags } from './api.service';
   selector: 'app-explore',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  template: `
-  <header style="background:#0b5fff;color:#fff;padding:16px 24px"><h1 style="margin:0">Explore</h1></header>
-  <main style="max-width:960px;margin:0 auto;padding:24px">
-    <input placeholder="#hashtag" [(ngModel)]="tag" (keyup.enter)="search()" style="padding:8px;border:1px solid #ddd;border-radius:6px" />
-    <button (click)="search()" style="margin-left:8px">Search</button>
-    <div *ngIf="loading">Loading…</div>
-    <article *ngFor="let p of posts" style="border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin:8px 0">
-      <div style="font-weight:600" [innerText]="p.title"></div>
-      <div [innerHTML]="render(p.body)"></div>
-    </article>
-  </main>
-  `
+  templateUrl: './explore.component.html'
 })
 export class ExploreComponent implements OnInit {
   tag = '';
@@ -39,3 +28,4 @@ export class ExploreComponent implements OnInit {
   }
   render(s: string) { return linkHashtags(s || ''); }
 }
+
