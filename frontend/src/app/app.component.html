@@ -1,7 +1,31 @@
-<div class="fixed top-3 right-3 z-50 flex items-center gap-2">
-  <a href="http://berjis.test/account" class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur hover:bg-gray-100 dark:bg-slate-800 dark:text-white">Account</a>
-  <button (click)="toggleTheme()" title="Toggle theme" class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur dark:bg-slate-800 dark:text-white">
-    {{ isDark ? 'Light' : 'Dark' }}
-  </button>
- </div>
-<router-outlet></router-outlet>
+<div class="grid grid-cols-4 h-screen w-full overflow-hidden p-0 m-0">
+  <div #leftSideBar class="col-span-1 h-screen overflow-y-auto overflow-x-hidden">
+    <div #userAvatar class="h-[200px] flex items-center justify-center">
+      <div class="w-[150px] h-[150px] rounded-full shadow bg-slate-600"></div>
+      <div class="w-[150px] h-[150px] rounded-full shadow bg-slate-900 -ms-8"></div>
+    </div>
+    <div #navLinks class="h-[calc(100vh-450px)] overflow-y-auto overflow-x-hidden flex flex-col">
+      <h1>Mav Links</h1> {{navLinks|json}}
+      <a [routerLink]="link.url" *ngFor="let link of navLinks" class="">O {{link.name}}</a>
+    </div>
+    <div #ads class="w-full flex items-center justify-center h-[250px]">
+      <div class="relative w-[70%] h-[200px] border-[2px] border-dashed border-orange-400 rounded-md"></div>
+    </div>
+  </div>
+  <div #mainContent class="col-span-2">
+    <router-outlet></router-outlet>
+  </div>
+  <div #rightSideBar class="col-span-1 h-screen overflow-y-auto overflow-x-hidden">
+    <div #stories></div>
+    <div #suggestions></div>
+    <div #recommendations></div>
+    <div class="flex items-center gap-2">
+      <a href="http://berjis.test/account"
+        class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur hover:bg-gray-100 dark:bg-slate-800 dark:text-white">Account</a>
+      <button (click)="toggleTheme()" title="Toggle theme"
+        class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur dark:bg-slate-800 dark:text-white">
+        {{ isDark ? 'Light' : 'Dark' }}
+      </button>
+    </div>
+  </div>
+</div>
