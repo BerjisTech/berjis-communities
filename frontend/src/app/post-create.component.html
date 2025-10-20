@@ -14,6 +14,17 @@
           </ng-container>
         </div>
       </div>
+      <div *ngIf="uploads.length" class="grid gap-1 mt-2" [ngClass]="{'grid-cols-2': uploads.length>1, 'grid-cols-1': uploads.length===1}">
+        <div *ngFor="let u of uploads; let i = index" class="relative">
+          <img *ngIf="u.kind!=='video'" [src]="u.url" class="w-full h-40 object-cover rounded" />
+          <video *ngIf="u.kind==='video'" [src]="u.url" class="w-full h-40 object-cover rounded" controls></video>
+          <button class="absolute top-1 right-1 bg-white/80 rounded px-2" (click)="removeUpload(i)">x</button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="file" multiple (change)="pickFiles($event)" />
+        <small class="text-gray-500">Add images/videos (optional)</small>
+      </div>
       <div *ngIf="!communityId && !groupId" style="display:grid;grid-template-columns:1fr;gap:12px">
         <label style="display:flex;gap:8px;align-items:center">
           <span>Visibility</span>

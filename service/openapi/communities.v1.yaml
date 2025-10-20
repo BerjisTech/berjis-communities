@@ -309,6 +309,79 @@ paths:
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
 
+  /v1/posts/{id}/like:
+    post:
+      tags: [posts]
+      summary: Like a post
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+    delete:
+      tags: [posts]
+      summary: Unlike a post
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/posts/{id}/react:
+    post:
+      tags: [posts]
+      summary: React to a post with an emoji
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emoji]
+              properties:
+                emoji: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+    delete:
+      tags: [posts]
+      summary: Remove a post reaction
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: emoji
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/posts/{id}/view:
+    post:
+      tags: [posts]
+      summary: Record a post view
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
   /v1/feed/public:
     get:
       tags: [posts]
@@ -329,6 +402,57 @@ paths:
           name: tag
           required: true
           schema: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/posts/{id}/comments:
+    get:
+      tags: [comments]
+      summary: List comments for a post
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+    post:
+      tags: [comments]
+      summary: Create a comment on a post
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string }
+                parent_comment_id: { type: integer, format: int64 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/uploads:
+    post:
+      tags: [uploads]
+      summary: Upload an image or video
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
 
@@ -502,6 +626,13 @@ components:
         hashtags:
           type: array
           items: { type: string }
+        media:
+          type: array
+          items:
+            type: object
+            properties:
+              url: { type: string }
+              kind: { type: string, enum: [image, video, other], default: image }
   securitySchemes:
     bearerAuth:
       type: http

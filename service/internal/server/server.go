@@ -4,8 +4,11 @@ import (
     "database/sql"
     "io"
     "net/http"
+    "os"
+    "path/filepath"
     "strconv"
     "strings"
+    "time"
 
     "github.com/gofiber/fiber/v2"
     "github.com/gofiber/fiber/v2/middleware/cors"
@@ -58,6 +61,10 @@ func New(opts Options) *fiber.App {
         return c.JSON(fiber.Map{"success": true, "message": "see /openapi/v1.yaml"})
     })
 
+    // Serve uploaded media
+    _ = os.MkdirAll("/data/uploads", 0755)
+    app.Static("/uploads", "/data/uploads")
+
     // Public list and get
     app.Get("/v1/communities", func(c *fiber.Ctx) error { return listCommunities(c, opts.DB) })
     app.Get("/v1/communities/:id", func(c *fiber.Ctx) error { return getCommunity(c, opts.DB) })
@@ -88,6 +95,18 @@ func New(opts Options) *fiber.App {
 
     // Generic posts (standalone or tied to group/community/channel)
     app.Post("/v1/posts", requireAuth, func(c *fiber.Ctx) error { return createGenericPost(c, opts.DB) })
+    app.Post("/v1/posts/:id/like", requireAuth, func(c *fiber.Ctx) error { return likePost(c, opts.DB) })
+    app.Delete("/v1/posts/:id/like", requireAuth, func(c *fiber.Ctx) error { return unlikePost(c, opts.DB) })
+    app.Post("/v1/posts/:id/react", requireAuth, func(c *fiber.Ctx) error { return reactPost(c, opts.DB) })
+    app.Delete("/v1/posts/:id/react", requireAuth, func(c *fiber.Ctx) error { return unreactPost(c, opts.DB) })
+    app.Post("/v1/posts/:id/view", func(c *fiber.Ctx) error { return viewPost(c, opts.DB) })
+
+    // Comments
+    app.Get("/v1/posts/:id/comments", func(c *fiber.Ctx) error { return listComments(c, opts.DB) })
+    app.Post("/v1/posts/:id/comments", requireAuth, func(c *fiber.Ctx) error { return createComment(c, opts.DB) })
+
+    // Uploads
+    app.Post("/v1/uploads", requireAuth, uploadHandler)
     app.Get("/v1/feed/public", func(c *fiber.Ctx) error { return publicFeed(c, opts.DB) })
     app.Get("/v1/explore", func(c *fiber.Ctx) error { return exploreByTag(c, opts.DB) })
 
@@ -310,6 +329,10 @@ func createGenericPost(c *fiber.Ctx, db *sqlx.DB) error {
         GroupID       *int64   `json:"group_id"`
         ParentPostID  *int64   `json:"parent_post_id"`
         Hashtags      []string `json:"hashtags"`
+        Media         []struct {
+            URL  string `json:"url"`
+            Kind string `json:"kind"`
+        } `json:"media"`
     }
     if err := c.BodyParser(&body); err != nil { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid json"}) }
     if strings.TrimSpace(body.Title) == "" && strings.TrimSpace(body.Body) == "" && strings.ToLower(body.Kind) != "repost" {
@@ -377,6 +400,17 @@ func createGenericPost(c *fiber.Ctx, db *sqlx.DB) error {
         }
     }
 
+    // Media attachments
+    for i, m := range body.Media {
+        u := strings.TrimSpace(m.URL)
+        if u == "" { continue }
+        kind := strings.ToLower(strings.TrimSpace(m.Kind))
+        if kind == "" { kind = "image" }
+        if _, err := tx.Exec("INSERT INTO posts_media(post_id, url, kind, position) VALUES ($1,$2,$3,$4)", id, u, kind, i); err != nil {
+            return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "media insert failed"})
+        }
+    }
+
     if err := tx.Commit(); err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "commit failed"}) }
     return c.Status(fiber.StatusCreated).JSON(fiber.Map{"success": true, "message": "created", "data": fiber.Map{"id": id}})
 }
@@ -414,13 +448,147 @@ func publicFeed(c *fiber.Ctx, db *sqlx.DB) error {
         var communityID, groupID sql.NullInt64
         var communitySlug, groupSlug sql.NullString
         _ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt, &communityID, &communitySlug, &groupID, &groupSlug)
+        // counts
+        var likeCount, reactCount, viewCount, commentCount int64
+        _ = db.Get(&likeCount, "SELECT COUNT(*) FROM post_likes WHERE post_id=$1", id.Int64)
+        _ = db.Get(&reactCount, "SELECT COUNT(*) FROM post_reactions WHERE post_id=$1", id.Int64)
+        _ = db.Get(&viewCount, "SELECT views FROM post_views_agg WHERE post_id=$1", id.Int64)
+        _ = db.Get(&commentCount, "SELECT COUNT(*) FROM post_comments WHERE post_id=$1", id.Int64)
+        // reactions breakdown
+        rb := []map[string]any{}
+        rrows, _ := db.Queryx("SELECT emoji, COUNT(*) FROM post_reactions WHERE post_id=$1 GROUP BY emoji ORDER BY COUNT(*) DESC", id.Int64)
+        for rrows != nil && rrows.Next() {
+            var emoji string
+            var cnt int64
+            _ = rrows.Scan(&emoji, &cnt)
+            rb = append(rb, fiber.Map{"emoji": emoji, "count": cnt})
+        }
+        if rrows != nil { rrows.Close() }
+        // media (first 6)
+        media := []map[string]any{}
+        mrows, _ := db.Queryx("SELECT url, kind FROM posts_media WHERE post_id=$1 ORDER BY position ASC, id ASC LIMIT 6", id.Int64)
+        for mrows != nil && mrows.Next() {
+            var url, mkind string
+            _ = mrows.Scan(&url, &mkind)
+            media = append(media, fiber.Map{"url": url, "kind": mkind})
+        }
+        if mrows != nil { mrows.Close() }
         items = append(items, fiber.Map{
             "id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.Int64, "kind": kind.String, "created_at": createdAt.String,
             "community_id": communityID.Int64, "community_slug": communitySlug.String,
             "group_id": groupID.Int64, "group_slug": groupSlug.String,
+            "like_count": likeCount, "reaction_count": reactCount, "view_count": viewCount, "comment_count": commentCount,
+            "reactions": rb,
+            "media": media,
         })
     }
     return c.JSON(fiber.Map{"success": true, "message": "ok", "data": items})
+}
+
+func likePost(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    if _, err := db.Exec("INSERT INTO post_likes(post_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", id, userIDFromContext(c)); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "like failed"})
+    }
+    var n int64; _ = db.Get(&n, "SELECT COUNT(*) FROM post_likes WHERE post_id=$1", id)
+    return c.JSON(fiber.Map{"success": true, "message": "liked", "data": fiber.Map{"like_count": n}})
+}
+
+func unlikePost(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    if _, err := db.Exec("DELETE FROM post_likes WHERE post_id=$1 AND user_id=$2", id, userIDFromContext(c)); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "unlike failed"})
+    }
+    var n int64; _ = db.Get(&n, "SELECT COUNT(*) FROM post_likes WHERE post_id=$1", id)
+    return c.JSON(fiber.Map{"success": true, "message": "unliked", "data": fiber.Map{"like_count": n}})
+}
+
+func reactPost(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    var body struct{ Emoji string `json:"emoji"` }
+    if err := c.BodyParser(&body); err != nil || strings.TrimSpace(body.Emoji) == "" {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "emoji required"})
+    }
+    if _, err := db.Exec("INSERT INTO post_reactions(post_id, user_id, emoji) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", id, userIDFromContext(c), body.Emoji); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "react failed"})
+    }
+    var n int64; _ = db.Get(&n, "SELECT COUNT(*) FROM post_reactions WHERE post_id=$1", id)
+    return c.JSON(fiber.Map{"success": true, "message": "reacted", "data": fiber.Map{"reaction_count": n}})
+}
+
+func unreactPost(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    emoji := strings.TrimSpace(c.Query("emoji"))
+    if emoji == "" { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "emoji required"}) }
+    if _, err := db.Exec("DELETE FROM post_reactions WHERE post_id=$1 AND user_id=$2 AND emoji=$3", id, userIDFromContext(c), emoji); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "unreact failed"})
+    }
+    var n int64; _ = db.Get(&n, "SELECT COUNT(*) FROM post_reactions WHERE post_id=$1", id)
+    return c.JSON(fiber.Map{"success": true, "message": "unreacted", "data": fiber.Map{"reaction_count": n}})
+}
+
+func viewPost(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    if _, err := db.Exec("INSERT INTO post_views_agg(post_id, views, updated_at) VALUES ($1,1,now()) ON CONFLICT (post_id) DO UPDATE SET views=post_views_agg.views+1, updated_at=now()", id); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "view failed"})
+    }
+    var n int64; _ = db.Get(&n, "SELECT views FROM post_views_agg WHERE post_id=$1", id)
+    return c.JSON(fiber.Map{"success": true, "message": "viewed", "data": fiber.Map{"view_count": n}})
+}
+
+func listComments(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    rows, err := db.Queryx("SELECT id, user_id, body, parent_comment_id, created_at FROM post_comments WHERE post_id=$1 ORDER BY id ASC LIMIT 500", id)
+    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
+    defer rows.Close()
+    items := []map[string]any{}
+    for rows.Next() {
+        var cid, uid int64
+        var body, created string
+        var parent sql.NullInt64
+        _ = rows.Scan(&cid, &uid, &body, &parent, &created)
+        items = append(items, fiber.Map{"id": cid, "user_id": uid, "body": body, "parent_comment_id": parent.Int64, "created_at": created})
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": items})
+}
+
+func createComment(c *fiber.Ctx, db *sqlx.DB) error {
+    id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+    if err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    var body struct{ Body string `json:"body"`; ParentCommentID *int64 `json:"parent_comment_id"` }
+    if err := c.BodyParser(&body); err != nil || strings.TrimSpace(body.Body) == "" {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "body required"})
+    }
+    var cid int64
+    if err := db.QueryRowx("INSERT INTO post_comments(post_id, user_id, body, parent_comment_id) VALUES ($1,$2,$3,$4) RETURNING id", id, userIDFromContext(c), body.Body, body.ParentCommentID).Scan(&cid); err != nil {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "create failed"})
+    }
+    var cnt int64; _ = db.Get(&cnt, "SELECT COUNT(*) FROM post_comments WHERE post_id=$1", id)
+    return c.Status(fiber.StatusCreated).JSON(fiber.Map{"success": true, "message": "created", "data": fiber.Map{"id": cid, "comment_count": cnt}})
+}
+
+func uploadHandler(c *fiber.Ctx) error {
+    f, err := c.FormFile("file")
+    if err != nil { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "file required"}) }
+    // naive content type check based on filename
+    name := f.Filename
+    ext := strings.ToLower(filepath.Ext(name))
+    kind := "image"
+    if ext == ".mp4" || ext == ".webm" || ext == ".mov" { kind = "video" }
+    // generate unique filename
+    base := strconv.FormatInt(time.Now().UnixNano(), 10)
+    dst := filepath.Join("/data/uploads", base+ext)
+    if err := c.SaveFile(f, dst); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "save failed"})
+    }
+    url := "/uploads/" + filepath.Base(dst)
+    return c.JSON(fiber.Map{"success": true, "message": "uploaded", "data": fiber.Map{"url": url, "kind": kind}})
 }
 
 func exploreByTag(c *fiber.Ctx, db *sqlx.DB) error {

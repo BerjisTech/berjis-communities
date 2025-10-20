@@ -1,4 +1,7 @@
-<button (click)="toggleTheme()" title="Toggle theme" class="fixed top-3 right-3 z-50 px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur dark:bg-slate-800 dark:text-white">
-  {{ isDark ? 'Light' : 'Dark' }}
- </button>
+<div class="fixed top-3 right-3 z-50 flex items-center gap-2">
+  <a href="http://berjis.test/account" class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur hover:bg-gray-100 dark:bg-slate-800 dark:text-white">Account</a>
+  <button (click)="toggleTheme()" title="Toggle theme" class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur dark:bg-slate-800 dark:text-white">
+    {{ isDark ? 'Light' : 'Dark' }}
+  </button>
+ </div>
 <router-outlet></router-outlet>

@@ -79,6 +79,7 @@ export class PostCreateComponent {
     const body = v.body || '';
     const tags = Array.from(new Set((body.match(/(^|\s)#([\w-]+)/g) || []).map(s => s.trim().replace(/^#/, '').toLowerCase())));
     const payload: any = { title: v.title || '', body, hashtags: tags };
+    if (this.uploads.length) { payload.media = this.uploads; }
     if (this.communityId) payload.community_id = this.communityId;
     if (this.groupId) payload.group_id = this.groupId;
     if (!this.communityId && !this.groupId) payload.visibility = (v.visibility as any) || 'public';
@@ -91,5 +92,19 @@ export class PostCreateComponent {
       shareReplay(1)
     );
   }
+
+  // Upload support
+  uploads: { url: string; kind: 'image'|'video'|'other' }[] = [];
+  pickFiles(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    if (!input.files?.length) return;
+    Array.from(input.files).forEach((f) => {
+      this.api.upload(f).subscribe({
+        next: (r) => { if (r?.data?.url) this.uploads.push({ url: r.data.url, kind: (r.data.kind as any) || 'image' }); },
+        error: () => {}
+      });
+    });
+  }
+  removeUpload(i: number) { this.uploads.splice(i, 1); }
 }
 

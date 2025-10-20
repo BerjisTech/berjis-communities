@@ -1,12 +1,13 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ApiService, linkHashtags } from './api.service';
 import { map } from 'rxjs';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './home.component.html'
 })
 export class HomeComponent implements OnInit {
@@ -14,6 +15,15 @@ export class HomeComponent implements OnInit {
   loading = true;
   users: Record<number, any> = {};
   hoverUser = 0;
+  moreFor: number|null = null;
+  reactFor: number|null = null;
+  emojis = ['👍','❤️','😂','🔥','🎉'];
+  viewerOpen = false;
+  viewerMedia: any[] = [];
+  viewerIndex = 0;
+  commentsOpen: Record<number, boolean> = {};
+  comments: Record<number, any[]> = {};
+  commentText: Record<number, string> = {};
   constructor(private api: ApiService) {}
   ngOnInit() {
     this.api.feedPublic(50).pipe(
@@ -72,5 +82,47 @@ export class HomeComponent implements OnInit {
     const mm = String(date.getMonth()+1).padStart(2,'0');
     const yy = String(date.getFullYear()).slice(-2);
     return `${dd} ${mm}, ${yy}`;
+  }
+
+  // Media viewer helpers
+  openViewer(p: any) { this.viewerMedia = p.media || []; this.viewerIndex = 0; this.viewerOpen = true; }
+  closeViewer() { this.viewerOpen = false; this.viewerMedia = []; this.viewerIndex = 0; }
+  nextMedia() { if (!this.viewerMedia.length) return; this.viewerIndex = (this.viewerIndex + 1) % this.viewerMedia.length; }
+  prevMedia() { if (!this.viewerMedia.length) return; this.viewerIndex = (this.viewerIndex - 1 + this.viewerMedia.length) % this.viewerMedia.length; }
+
+  // Engagement actions
+  toggleLike(p: any) {
+    const id = p.id;
+    // naive toggle: try like, if error then unlike
+    this.api.likePost(id).subscribe({
+      next: (r) => { p.like_count = r.data?.like_count ?? p.like_count; },
+      error: () => {
+        this.api.unlikePost(id).subscribe({ next: (r2) => { p.like_count = r2.data?.like_count ?? p.like_count; } });
+      }
+    });
+  }
+  react(p: any, emoji: string) {
+    const id = p.id;
+    this.api.reactPost(id, emoji).subscribe({ next: (r) => { p.reaction_count = r.data?.reaction_count ?? p.reaction_count; this.reactFor = null; } });
+  }
+  recordView(p: any) {
+    this.api.viewPost(p.id).subscribe({ next: (r) => { p.view_count = r.data?.view_count ?? p.view_count; } });
+  }
+  // Comments
+  toggleComments(p: any) {
+    this.commentsOpen[p.id] = !this.commentsOpen[p.id];
+    if (this.commentsOpen[p.id] && !this.comments[p.id]) {
+      this.api.listComments(p.id).subscribe({ next: (res) => { this.comments[p.id] = res.data || []; } });
+    }
+  }
+  submitComment(p: any) {
+    const body = (this.commentText[p.id] || '').trim();
+    if (!body) return;
+    this.api.createComment(p.id, body).subscribe({
+      next: () => {
+        this.commentText[p.id] = '';
+        this.api.listComments(p.id).subscribe({ next: (r2) => { this.comments[p.id] = r2.data || []; p.comment_count = (this.comments[p.id] || []).length; } });
+      }
+    });
   }
 }

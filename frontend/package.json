@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "start": "ng serve --host 0.0.0.0 --port 5200",
-    "build": "ng build"
+    "build": "ng build",
+    "watch": "ng build --configuration development --watch"
   },
   "dependencies": {
     "@angular/animations": "^18.0.0",
@@ -30,4 +31,3 @@
     "typescript": "~5.4.0"
   }
 }
-

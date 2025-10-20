@@ -79,6 +79,45 @@ export class ApiService {
     return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/users/mini?ids=${uniq.join(',')}`);
   }
 
+  // Post engagement
+  likePost(id: number) {
+    return this.http.post<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`, {}, { headers: this.headers() });
+  }
+  unlikePost(id: number) {
+    return this.http.delete<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`, { headers: this.headers() });
+  }
+  reactPost(id: number, emoji: string) {
+    return this.http.post<{ success: boolean; data: { reaction_count: number } }>(`${this.svcBase()}/v1/posts/${id}/react`, { emoji }, { headers: this.headers() });
+  }
+  unreactPost(id: number, emoji: string) {
+    return this.http.delete<{ success: boolean; data: { reaction_count: number } }>(`${this.svcBase()}/v1/posts/${id}/react?emoji=${encodeURIComponent(emoji)}`, { headers: this.headers() });
+  }
+  viewPost(id: number) {
+    return this.http.post<{ success: boolean; data: { view_count: number } }>(`${this.svcBase()}/v1/posts/${id}/view`, {});
+  }
+
+  // Comments
+  listComments(postId: number) {
+    return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/posts/${postId}/comments`);
+  }
+  createComment(postId: number, body: string, parent_comment_id?: number) {
+    const payload: any = { body };
+    if (parent_comment_id) payload.parent_comment_id = parent_comment_id;
+    return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts/${postId}/comments`, payload, { headers: this.headers() });
+  }
+
+  // Uploads
+  upload(file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    let h = new HttpHeaders();
+    const token = localStorage.getItem('accessToken');
+    if (token) { h = h.set('Authorization', `Bearer ${token}`); }
+    const devUser = localStorage.getItem('devUserId');
+    if (devUser) { h = h.set('X-User-ID', devUser); }
+    return this.http.post<{ success: boolean; data: { url: string; kind: 'image'|'video'|'other' } }>(`${this.svcBase()}/v1/uploads`, fd, { headers: h });
+  }
+
   // Admin actions (server enforces permission)
   setCommunityMemberRole(communityId: number, userId: number, role: 'admin' | 'member') {
     return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${communityId}/members/${userId}/role`, { role }, { headers: this.headers() });
