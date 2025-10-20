@@ -4,9 +4,14 @@
       <div class="w-[150px] h-[150px] rounded-full shadow bg-slate-600"></div>
       <div class="w-[150px] h-[150px] rounded-full shadow bg-slate-900 -ms-8"></div>
     </div>
-    <div #navLinks class="h-[calc(100vh-450px)] overflow-y-auto overflow-x-hidden flex flex-col">
-      <h1>Mav Links</h1> {{navLinks|json}}
-      <a [routerLink]="link.url" *ngFor="let link of navLinks" class="">O {{link.name}}</a>
+    <div #navLinksRef class="h-[calc(100vh-450px)] w-[300px] mx-auto overflow-y-auto overflow-x-hidden flex flex-col px-2">
+      <a [routerLink]="link.url" *ngFor="let link of navLinks"
+        class="rounded-lg p-3 flex items-center justify-start gap-2 w-full"
+        routerLinkActive="!bg-slate-800 !text-slate-100"
+        [routerLinkActiveOptions]="link.url === '/' ? { exact: true } : { exact: false }">
+        <span class="material-symbols-outlined">{{link.icon}}</span>
+        <span>{{link.name}}</span>
+      </a>
     </div>
     <div #ads class="w-full flex items-center justify-center h-[250px]">
       <div class="relative w-[70%] h-[200px] border-[2px] border-dashed border-orange-400 rounded-md"></div>

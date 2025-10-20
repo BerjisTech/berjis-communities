@@ -1,0 +1,129 @@
+<article class="rounded-lg p-3 my-2 bg-white dark:bg-slate-800" [style.marginLeft.px]="depth * 24">
+  <div class="flex items-center justify-between gap-3 mb-2">
+    <div class="flex items-center gap-3">
+      <div class="relative group" (mouseenter)="showUserPopover = true" (mouseleave)="showUserPopover = false">
+        <a [href]="'/u/' + (userName(post.user_id) || ('u' + post.user_id))" class="block h-[30px] w-[30px]">
+          <img [src]="avatarUrl(post.user_id)" alt="avatar" class="h-[30px] w-[30px] rounded-full object-cover bg-gray-200" />
+        </a>
+        <div *ngIf="showUserPopover"
+             class="hidden group-hover:block absolute z-20 mt-2 p-3 w-64 border border-gray-200 rounded-lg bg-white shadow-lg dark:bg-slate-900">
+          <div class="flex items-center gap-2 mb-2">
+            <img [src]="avatarUrl(post.user_id)" class="h-10 w-10 rounded-full object-cover bg-gray-200" />
+            <div>
+              <div class="font-semibold">{{ fullName(post.user_id) || userName(post.user_id) || ('u' + post.user_id) }}</div>
+              <div class="text-sm text-gray-500">&#64;{{ userName(post.user_id) || ('u' + post.user_id) }}</div>
+            </div>
+          </div>
+          <div class="text-sm mb-2" *ngIf="bio(post.user_id)">{{ bio(post.user_id) }}</div>
+          <div class="text-xs text-gray-600 flex gap-3">
+            <span>{{ followers(post.user_id) }} followers</span>
+            <span>{{ following(post.user_id) }} following</span>
+            <span>{{ postsCount(post.user_id) }} posts</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-col">
+        <a [href]="'/u/' + (userName(post.user_id) || ('u' + post.user_id))" class="font-medium hover:underline">
+          {{ userName(post.user_id) || ('u' + post.user_id) }}
+        </a>
+        <span class="text-xs text-gray-500">{{ timeAgo(post.created_at) }}</span>
+      </div>
+    </div>
+    <div class="relative" (mouseleave)="moreMenuOpen = false">
+      <button class="px-2 py-1 rounded hover:bg-gray-100" (click)="$event.stopPropagation(); moreMenuOpen = !moreMenuOpen">?</button>
+      <div *ngIf="moreMenuOpen"
+           class="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-30">
+        <button class="block w-full text-left px-3 py-2 hover:bg-gray-50">Report</button>
+        <button class="block w-full text-left px-3 py-2 hover:bg-gray-50">Not interested</button>
+        <button class="block w-full text-left px-3 py-2 hover:bg-gray-50">Block user</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="font-semibold" *ngIf="post.title" [innerText]="post.title"></div>
+  <div [innerHTML]="render(post.body)"></div>
+
+  <div *ngIf="hasMedia" class="mt-2 grid gap-1"
+       [ngClass]="{'grid-cols-2': (post.media || []).length > 1, 'grid-cols-1': (post.media || []).length === 1}">
+    <ng-container *ngFor="let media of post.media; let i = index">
+      <ng-container *ngIf="i < 4">
+        <div class="relative">
+          <img *ngIf="media.kind !== 'video'" [src]="media.url" class="w-full h-48 object-cover rounded" (click)="openViewer()" />
+          <video *ngIf="media.kind === 'video'" [src]="media.url" class="w-full h-48 object-cover rounded" controls></video>
+          <div *ngIf="i === 3 && (post.media.length > 4)"
+               class="absolute inset-0 bg-black/40 text-white flex items-center justify-center text-xl font-semibold rounded">
+            +{{ post.media.length - 4 }}
+          </div>
+        </div>
+      </ng-container>
+    </ng-container>
+  </div>
+
+  <div class="mt-2 flex items-center gap-4 text-sm text-gray-700">
+    <button class="px-2 py-1 rounded hover:bg-gray-100" (click)="toggleLike()">👍 {{ post.like_count || 0 }}</button>
+    <button class="px-2 py-1 rounded hover:bg-gray-100" (click)="toggleComments()">💬 {{ post.comment_count ?? comments.length }}</button>
+    <button class="px-2 py-1 rounded hover:bg-gray-100" (click)="recordView()">👁️ {{ post.view_count || 0 }}</button>
+    <div class="relative" (mouseleave)="reactionMenuOpen = false">
+      <button class="px-2 py-1 rounded hover:bg-gray-100" (click)="toggleReactionMenu($event)">
+        😃 {{ post.reaction_count || 0 }}
+      </button>
+      <div *ngIf="reactionMenuOpen" class="absolute z-30 mt-1 p-1 bg-white border border-gray-200 rounded shadow">
+        <button class="px-2" *ngFor="let emoji of emojis" (click)="react(emoji)">{{ emoji }}</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-2" *ngIf="(post.reactions || []).length">
+      <span *ngFor="let reaction of post.reactions">{{ reaction.emoji }} {{ reaction.count }}</span>
+    </div>
+    <small class="ml-auto" *ngIf="post.community_slug">in <a [href]="'/c/' + post.community_slug">/c/{{ post.community_slug }}</a></small>
+    <small *ngIf="post.group_slug">in <a [href]="'/g/' + post.group_slug">/g/{{ post.group_slug }}</a></small>
+  </div>
+
+  <div *ngIf="commentsOpen" class="mt-3 border-t border-slate-100 pt-2">
+    <div *ngIf="commentsLoading" class="text-sm text-gray-500 py-2">Loading…</div>
+    <div class="space-y-2" *ngIf="!commentsLoading">
+      <app-post-card
+        *ngFor="let child of comments"
+        [post]="child"
+        [users]="users"
+        [depth]="depth + 1"
+        [emojis]="emojis"
+        (reloadRequested)="reloadFromChild($event)">
+      </app-post-card>
+    </div>
+    <div class="mt-2 flex gap-2 items-start">
+      <input [(ngModel)]="commentText" placeholder="Write a comment" class="flex-1 border rounded px-2 py-1" />
+      <button class="px-3 py-1 border rounded"
+              [disabled]="submittingComment || !commentText.trim()"
+              (click)="submitComment()">
+        {{ submittingComment ? 'Sending…' : 'Send' }}
+      </button>
+    </div>
+  </div>
+
+  <div *ngIf="viewerOpen" class="fixed inset-0 z-50 bg-black/90 flex flex-col" (click)="closeViewer()">
+    <div class="flex justify-between items-center p-3 text-white">
+      <div>{{ viewerIndex + 1 }} / {{ viewerMedia.length }}</div>
+      <button class="px-3 py-1 bg-white/20 rounded" (click)="closeViewer(); $event.stopPropagation()">Close</button>
+    </div>
+    <div class="flex-1 flex items-center justify-center">
+      <img *ngIf="viewerMedia[viewerIndex]?.kind !== 'video'"
+           [src]="viewerMedia[viewerIndex]?.url"
+           class="max-h-full max-w-full object-contain" />
+      <video *ngIf="viewerMedia[viewerIndex]?.kind === 'video'"
+             [src]="viewerMedia[viewerIndex]?.url"
+             class="max-h-full max-w-full object-contain"
+             controls autoplay></video>
+    </div>
+    <div class="absolute inset-y-0 left-0 flex items-center">
+      <button class="text-white text-2xl px-4" (click)="prevMedia($event)">&lt;</button>
+    </div>
+    <div class="absolute inset-y-0 right-0 flex items-center">
+      <button class="text-white text-2xl px-4" (click)="nextMedia($event)">&gt;</button>
+    </div>
+    <div class="p-3 flex justify-center gap-2">
+      <span *ngFor="let media of viewerMedia; let idx = index"
+            class="h-2 w-2 rounded-full"
+            [ngClass]="{'bg-white': idx === viewerIndex, 'bg-white/40': idx !== viewerIndex}"></span>
+    </div>
+  </div>
+</article>

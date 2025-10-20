@@ -1,38 +1,28 @@
 import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, OnInit } from '@angular/core';
-import { RouterOutlet, RouterLink } from '@angular/router';
+import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
   templateUrl: './app.component.html'
 })
 export class AppComponent implements OnInit, AfterViewInit {
   public isDark = false;
   public navLinks: { name: string, url: string, icon?: string }[] = [
-    { name: "Feed", url: "/" },
-    { name: "Messages", url: "/messages" },
-    { name: "Communities", url: "/communities" },
-    { name: "Groups", url: "/groups" },
-    { name: "Feed", url: "/" },
-    { name: "Settings", url: "/settings" },
+    { name: "Feed", url: "/", icon: "view_day" },
+    { name: "Explore", url: "/explore", icon: "explore" },
+    { name: "Messages", url: "/messages", icon: "mail" },
+    { name: "Communities", url: "/communities", icon: "chat" },
+    { name: "Groups", url: "/groups", icon: "group" },
+    { name: "Settings", url: "/settings", icon: "settings" },
   ]
 
   constructor() {
   }
 
-  ngOnInit() {
-    this.navLinks = [
-    { name: "Feed", url: "/" },
-    { name: "Messages", url: "/messages" },
-    { name: "Communities", url: "/communities" },
-    { name: "Groups", url: "/groups" },
-    { name: "Feed", url: "/" },
-    { name: "Settings", url: "/settings" },
-  ]
-    console.log(this.navLinks)
-  }
+  ngOnInit() { }
 
   ngAfterViewInit() {
     const stored = localStorage.getItem('theme');
