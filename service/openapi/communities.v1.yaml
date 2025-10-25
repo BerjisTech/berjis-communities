@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: Minimal spec to bootstrap clients for Communities service.
 servers:
-  - url: http://communities-api.berjis.test
+  - url: http://communities-api.berjis.tech
 paths:
   /v1/health:
     get:
