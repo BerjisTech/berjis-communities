@@ -1,11 +1,17 @@
 <div class="grid grid-cols-4 h-screen w-full overflow-hidden p-0 m-0">
   <div #leftSideBar class="col-span-1 h-screen overflow-y-auto overflow-x-hidden">
     <div #userAvatar class="h-[200px] flex items-center justify-center">
-      <div class="w-[150px] h-[150px] rounded-full shadow bg-slate-600"></div>
+      <ng-container *ngIf="currentUser; else avatarPlaceholder">
+        <img [src]="userAvatar" alt="Profile avatar" class="w-[150px] h-[150px] rounded-full shadow object-cover bg-slate-200" />
+      </ng-container>
+      <ng-template #avatarPlaceholder>
+        <div class="w-[150px] h-[150px] rounded-full shadow bg-slate-600 animate-pulse"></div>
+      </ng-template>
     </div>
-    <div #userName class="flex flex-col items-center justify-center">
-      <span class="font-black text-xl">Full Name</span>
-      <span class="font-light text-slate-600">&#64; username</span>
+    <div #userName class="flex flex-col items-center justify-center text-center">
+      <span class="font-black text-xl">{{ currentUser ? userDisplayName : 'Guest' }}</span>
+      <span class="font-light text-slate-600" *ngIf="currentUser && userHandle">{{ userHandle }}</span>
+      <span class="font-light text-slate-400" *ngIf="!currentUser">Sign in to personalise</span>
     </div>
     <div #navLinksRef
       class="h-[calc(100vh-550px)] w-[300px] mx-auto overflow-y-auto overflow-x-hidden flex flex-col px-2">

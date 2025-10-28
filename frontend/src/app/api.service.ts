@@ -1,14 +1,21 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { environment } from '../environments/environment';
+
+type MiniUser = Record<string, any>;
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
+  private coreBase = environment.apiBase;
+  private meCache: { data: any; ts: number } | null = null;
+  private meInFlight: Promise<any> | null = null;
+
   constructor(private http: HttpClient) {}
 
   private svcBase(): string {
     const w: any = (typeof window !== 'undefined') ? (window as any) : {};
-    return w.__COMMUNITIES_API__ || 'http://localhost:8090';
+    return w.__COMMUNITIES_API__ || 'https://communities-api.berjis.tech';
   }
 
   private headers(): HttpHeaders {
@@ -45,7 +52,6 @@ export class ApiService {
     return this.http.get<{ success: boolean; data: any }>(`${this.svcBase()}/v1/groups/by-slug/${encodeURIComponent(slug)}`);
   }
 
-  // Creation
   createCommunity(body: { name: string; slug: string; description?: string; visibility?: string; access?: string; hashtags?: string[] }) {
     return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/communities`, body, { headers: this.headers() });
   }
@@ -54,7 +60,6 @@ export class ApiService {
     return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/groups`, body, { headers: this.headers() });
   }
 
-  // Membership
   joinCommunity(id: number) {
     return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${id}/join`, {}, { headers: this.headers() });
   }
@@ -63,8 +68,7 @@ export class ApiService {
     return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/groups/${id}/join`, {}, { headers: this.headers() });
   }
 
-  // Generic post creation
-  createPostGeneric(body: { title?: string; body?: string; kind?: string; visibility?: 'public'|'private'; community_id?: number; channel_id?: number; group_id?: number; parent_post_id?: number; hashtags?: string[] }) {
+  createPostGeneric(body: { title?: string; body?: string; kind?: string; visibility?: 'public' | 'private'; community_id?: number; channel_id?: number; group_id?: number; parent_post_id?: number; hashtags?: string[] }) {
     return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts`, body, { headers: this.headers() });
   }
 
@@ -72,41 +76,73 @@ export class ApiService {
     return this.http.get<{ success: boolean; data: { name: string; count: number }[] }>(`${this.svcBase()}/v1/tags/suggest?q=${encodeURIComponent(q)}&limit=${limit}`);
   }
 
-  // User profiles (mini) via Communities proxy to Core API
-  usersMini(ids: number[]) {
-    const uniq = Array.from(new Set(ids.filter(Boolean)));
-    if (!uniq.length) return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/users/mini?ids=`);
-    return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/users/mini?ids=${uniq.join(',')}`);
+  async currentUser(force = false): Promise<any | null> {
+    if (!force && this.meCache && Date.now() - this.meCache.ts < 30_000) {
+      return this.meCache.data;
+    }
+    if (!force && this.meInFlight) {
+      return this.meInFlight;
+    }
+    const request = firstValueFrom(this.http.get<{ success?: boolean; data?: any }>(`${this.coreBase}/v1/me`, { withCredentials: true }))
+      .then(res => {
+        const data = (res as any)?.data ?? res;
+        this.meCache = { data, ts: Date.now() };
+        return data;
+      })
+      .catch(err => {
+        this.meCache = null;
+        throw err;
+      })
+      .finally(() => {
+        this.meInFlight = null;
+      });
+    this.meInFlight = request;
+    return request;
   }
 
-  // Post engagement
+  usersMini(ids: Array<string | number>) {
+    const uniq = Array.from(new Set(
+      ids
+        .map(id => (id ?? '').toString().trim())
+        .filter(id => id.length > 0)
+    ));
+    const query = uniq.map(id => encodeURIComponent(id)).join(',');
+    return this.http.get<{ success: boolean; data: MiniUser[] }>(
+      `${this.svcBase()}/v1/users/mini?ids=${encodeURIComponent(query)}`,
+      { headers: this.headers(), withCredentials: true }
+    );
+  }
+
   likePost(id: number) {
     return this.http.post<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`, {}, { headers: this.headers() });
   }
+
   unlikePost(id: number) {
     return this.http.delete<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`, { headers: this.headers() });
   }
+
   reactPost(id: number, emoji: string) {
     return this.http.post<{ success: boolean; data: { reaction_count: number } }>(`${this.svcBase()}/v1/posts/${id}/react`, { emoji }, { headers: this.headers() });
   }
+
   unreactPost(id: number, emoji: string) {
     return this.http.delete<{ success: boolean; data: { reaction_count: number } }>(`${this.svcBase()}/v1/posts/${id}/react?emoji=${encodeURIComponent(emoji)}`, { headers: this.headers() });
   }
+
   viewPost(id: number) {
     return this.http.post<{ success: boolean; data: { view_count: number } }>(`${this.svcBase()}/v1/posts/${id}/view`, {});
   }
 
-  // Comments
   listComments(postId: number) {
     return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/posts/${postId}/comments`);
   }
+
   createComment(postId: number, body: string, parent_comment_id?: number) {
     const payload: any = { body };
     if (parent_comment_id) payload.parent_comment_id = parent_comment_id;
     return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts/${postId}/comments`, payload, { headers: this.headers() });
   }
 
-  // Uploads
   upload(file: File) {
     const fd = new FormData();
     fd.append('file', file);
@@ -115,10 +151,9 @@ export class ApiService {
     if (token) { h = h.set('Authorization', `Bearer ${token}`); }
     const devUser = localStorage.getItem('devUserId');
     if (devUser) { h = h.set('X-User-ID', devUser); }
-    return this.http.post<{ success: boolean; data: { url: string; kind: 'image'|'video'|'other' } }>(`${this.svcBase()}/v1/uploads`, fd, { headers: h });
+    return this.http.post<{ success: boolean; data: { url: string; kind: 'image' | 'video' | 'other' } }>(`${this.svcBase()}/v1/uploads`, fd, { headers: h });
   }
 
-  // Admin actions (server enforces permission)
   setCommunityMemberRole(communityId: number, userId: number, role: 'admin' | 'member') {
     return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${communityId}/members/${userId}/role`, { role }, { headers: this.headers() });
   }

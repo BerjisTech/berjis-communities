@@ -1,37 +1,41 @@
 package main
 
 import (
-    "log"
-    "os"
+	"log"
+	"os"
 
-    "github.com/joho/godotenv"
+	"github.com/joho/godotenv"
 
-    "github.com/berjistech/berjis-ecosystem/communities/service/internal/config"
-    "github.com/berjistech/berjis-ecosystem/communities/service/internal/db"
-    "github.com/berjistech/berjis-ecosystem/communities/service/internal/migrate"
-    "github.com/berjistech/berjis-ecosystem/communities/service/internal/server"
+	"github.com/berjistech/berjis-ecosystem/communities/service/internal/config"
+	"github.com/berjistech/berjis-ecosystem/communities/service/internal/db"
+	"github.com/berjistech/berjis-ecosystem/communities/service/internal/migrate"
+	"github.com/berjistech/berjis-ecosystem/communities/service/internal/server"
 )
 
 func main() {
-    _ = godotenv.Load()
-    cfg := config.Load()
+	_ = godotenv.Load()
+	cfg := config.Load()
 
-    conn, err := db.Connect(cfg.DatabaseURL)
-    if err != nil {
-        log.Printf("warn: failed to connect to communities DB: %v", err)
-    } else {
-        runner := migrate.Runner{Dir: "./migrations"}
-        if err := runner.Up(conn); err != nil {
-            log.Printf("warn: migrations failed: %v", err)
-        }
-    }
+	conn, err := db.Connect(cfg.DatabaseURL)
+	if err != nil {
+		log.Printf("warn: failed to connect to communities DB: %v", err)
+	} else {
+		runner := migrate.Runner{Dir: "./migrations"}
+		if err := runner.Up(conn); err != nil {
+			log.Printf("warn: migrations failed: %v", err)
+		}
+	}
 
-    app := server.New(server.Options{AllowedOrigins: cfg.AllowedOrigins, CoreAPIBase: cfg.CoreAPIBase, DB: conn})
-    addr := ":" + cfg.Port
-    log.Printf("starting %s on %s (env=%s)", cfg.AppName, addr, cfg.Env)
-    if err := app.Listen(addr); err != nil {
-        log.Println("shutdown:", err)
-        os.Exit(1)
-    }
+	app := server.New(server.Options{
+		AllowedOrigins:    cfg.AllowedOrigins,
+		CoreAPIBase:       cfg.CoreAPIBase,
+		UploadsPublicBase: cfg.UploadsPublicBase,
+		DB:                conn,
+	})
+	addr := ":" + cfg.Port
+	log.Printf("starting %s on %s (env=%s)", cfg.AppName, addr, cfg.Env)
+	if err := app.Listen(addr); err != nil {
+		log.Println("shutdown:", err)
+		os.Exit(1)
+	}
 }
-

@@ -11,7 +11,7 @@ import { ApiService, linkHashtags } from './api.service';
 })
 export class PostCardComponent implements OnChanges {
   @Input() post!: any;
-  @Input() users: Record<number, any> = {};
+  @Input() users: Record<string, any> = {};
   @Input() depth = 0;
   @Input() emojis: string[] = ['👍', '❤️', '😂', '🎉', '😢'];
   @Output() reloadRequested = new EventEmitter<number>();
@@ -36,7 +36,7 @@ export class PostCardComponent implements OnChanges {
     if (changes['post'] && !changes['post'].firstChange) {
       if (this.depth === 0) {
         if (this.post?.children && (this.commentsOpen || this.commentsLoaded)) {
-          this.comments = Array.isArray(this.post.children) ? [ ...this.post.children ] : [];
+          this.comments = Array.isArray(this.post.children) ? [...this.post.children] : [];
           this.commentsLoaded = true;
         }
       } else {
@@ -58,11 +58,9 @@ export class PostCardComponent implements OnChanges {
     if (this.commentsOpen) {
       if (this.depth === 0) {
         this.loadComments();
-      } else {
-        if (!this.commentsLoaded) {
-          this.comments = Array.isArray(this.post?.children) ? this.post.children : [];
-          this.commentsLoaded = true;
-        }
+      } else if (!this.commentsLoaded) {
+        this.comments = Array.isArray(this.post?.children) ? this.post.children : [];
+        this.commentsLoaded = true;
       }
     }
   }
@@ -168,33 +166,43 @@ export class PostCardComponent implements OnChanges {
     return linkHashtags(content || '');
   }
 
-  userName(id: number) {
-    return this.users[id]?.username || this.users[id]?.handle || '';
+  userName(id: any) {
+    const u = this.lookupUser(id);
+    return u?.username || u?.handle || '';
   }
 
-  fullName(id: number) {
-    return this.users[id]?.full_name || this.users[id]?.name || '';
+  fullName(id: any) {
+    const u = this.lookupUser(id);
+    return u?.full_name || u?.name || '';
   }
 
-  bio(id: number) {
-    return this.users[id]?.bio || '';
+  bio(id: any) {
+    const u = this.lookupUser(id);
+    return u?.bio || '';
   }
 
-  followers(id: number) {
-    return this.users[id]?.followers_count ?? this.users[id]?.followers ?? 0;
+  followers(id: any) {
+    const u = this.lookupUser(id);
+    return u?.followers_count ?? u?.followers ?? 0;
   }
 
-  following(id: number) {
-    return this.users[id]?.following_count ?? this.users[id]?.following ?? 0;
+  following(id: any) {
+    const u = this.lookupUser(id);
+    return u?.following_count ?? u?.following ?? 0;
   }
 
-  postsCount(id: number) {
-    return this.users[id]?.posts_count ?? this.users[id]?.posts ?? 0;
+  postsCount(id: any) {
+    const u = this.lookupUser(id);
+    return u?.posts_count ?? u?.posts ?? 0;
   }
 
-  avatarUrl(id: number) {
-    const u = this.users[id];
-    return u?.avatar_url || u?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${id}`;
+  avatarUrl(id: any) {
+    const u = this.lookupUser(id);
+    if (u?.avatarUrl) return u.avatarUrl;
+    if (u?.avatar_url) return u.avatar_url;
+    if (u?.avatar) return u.avatar;
+    const seed = encodeURIComponent(this.normalizeId(id) || 'member');
+    return `https://api.dicebear.com/7.x/identicon/svg?seed=${seed}`;
   }
 
   timeAgo(iso: string): string {
@@ -243,26 +251,26 @@ export class PostCardComponent implements OnChanges {
   }
 
   private ensureUserCache(nodes: any[]) {
-    const ids = new Set<number>();
+    const ids = new Set<string>();
     const stack = [...nodes];
     while (stack.length) {
       const node = stack.pop();
       if (node?.user_id) {
-        ids.add(Number(node.user_id));
+        const key = this.normalizeId(node.user_id);
+        if (key && !this.users[key]) ids.add(key);
       }
       if (Array.isArray(node?.children) && node.children.length) {
         stack.push(...node.children);
       }
     }
-    const missing = Array.from(ids).filter((id) => !this.users[id]);
-    if (!missing.length) return;
-    this.api.usersMini(missing).subscribe({
+    if (!ids.size) return;
+    this.api.usersMini(Array.from(ids)).subscribe({
       next: (res) => {
         const arr = Array.isArray(res.data) ? res.data : [];
         for (const u of arr) {
-          const id = Number(u.id ?? u.user_id);
-          if (id) {
-            this.users[id] = u;
+          const key = this.normalizeId(u?.id ?? u?.user_id ?? u?.uuid);
+          if (key) {
+            this.users[key] = u;
           }
         }
       }
@@ -288,5 +296,16 @@ export class PostCardComponent implements OnChanges {
       }
     }
     return roots;
+  }
+
+  private lookupUser(id: any): any {
+    const key = this.normalizeId(id);
+    if (!key) return undefined;
+    return this.users[key];
+  }
+
+  private normalizeId(value: any): string {
+    if (value === null || value === undefined) return '';
+    return value.toString().trim();
   }
 }
