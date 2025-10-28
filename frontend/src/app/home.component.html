@@ -1,18 +1,7 @@
-<header class="bg-blue-600 text-white px-6 py-4">
-  <h1 class="m-0 text-xl font-semibold">Home</h1>
-  <nav class="mt-1 space-x-3">
-    <a class="text-white hover:underline" href="/communities">Communities</a>
-    <a class="text-white hover:underline" href="/explore">Explore</a>
-    <a class="text-white hover:underline" href="/create">New Post</a>
-  </nav>
-</header>
-<main class="max-w-4xl mx-auto p-6">
-  <section class="mb-4">
-    <h3>Stories</h3>
-    <div>Coming soon (24h status with green avatar ring)</div>
-  </section>
+<main class="max-w-4xl mx-auto p-6 h-[100vh] overflow-x-hidden overflow-y-auto">
+  <app-post-create></app-post-create>
   <section>
-    <div class="flex items-center justify-between">
+    <div class="sticky top-0 z-50 flex items-center justify-between">
       <div class="font-black text-xl">Feed</div>
       <div class="flex items-center justify-end gap-2">
         <div class="tab_recent text-gray-600 font-bold cursor-pointer">Recent</div>
@@ -21,11 +10,7 @@
       </div>
     </div>
     <div *ngIf="loading">Loading.</div>
-    <app-post-card
-      *ngFor="let post of posts"
-      [post]="post"
-      [users]="users"
-      [emojis]="emojis">
+    <app-post-card *ngFor="let post of posts" [post]="post" [users]="users" [emojis]="emojis">
     </app-post-card>
   </section>
 </main>

@@ -52,7 +52,7 @@ export class PostCreateComponent {
     const pos = el ? el.selectionStart || text.length : text.length;
     const left = text.slice(0, pos);
     const match = left.match(/(^|\s)#([\w-]{1,32})$/);
-    return match ? match[2] : '';
+    return (match && match.length > 0) ? match[2] : '';
   }
 
   insertTag(tag: string) {

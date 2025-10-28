@@ -2,9 +2,13 @@
   <div #leftSideBar class="col-span-1 h-screen overflow-y-auto overflow-x-hidden">
     <div #userAvatar class="h-[200px] flex items-center justify-center">
       <div class="w-[150px] h-[150px] rounded-full shadow bg-slate-600"></div>
-      <div class="w-[150px] h-[150px] rounded-full shadow bg-slate-900 -ms-8"></div>
     </div>
-    <div #navLinksRef class="h-[calc(100vh-450px)] w-[300px] mx-auto overflow-y-auto overflow-x-hidden flex flex-col px-2">
+    <div #userName class="flex flex-col items-center justify-center">
+      <span class="font-black text-xl">Full Name</span>
+      <span class="font-light text-slate-600">&#64; username</span>
+    </div>
+    <div #navLinksRef
+      class="h-[calc(100vh-550px)] w-[300px] mx-auto overflow-y-auto overflow-x-hidden flex flex-col px-2">
       <a [routerLink]="link.url" *ngFor="let link of navLinks"
         class="rounded-lg p-3 flex items-center justify-start gap-2 w-full"
         routerLinkActive="!bg-slate-800 !text-slate-100"
@@ -13,15 +17,26 @@
         <span>{{link.name}}</span>
       </a>
     </div>
-    <div #ads class="w-full flex items-center justify-center h-[250px]">
-      <div class="relative w-[70%] h-[200px] border-[2px] border-dashed border-orange-400 rounded-md"></div>
+    <div #ads class="mx-auto w-[250px] flex items-center justify-center h-[250px]">
+      <div class="relative w-full h-full border-[2px] border-dashed border-orange-400 rounded-md">
+        <div class="w-[100px] h-[100px] absolute bottom-[-25px] left-[-25px] shadow bg-gradient-to-tl from-teal-400 to-cyan-300 rounded-full"></div>
+        <div
+          class="w-[100px] h-[100px] absolute top-[-20px] right-[-20px] shadow bg-gradient-to-r from-rose-400 to-orange-300 rounded-full">
+        </div>
+        <div class="w-[150px] h-[150px] absolute top-[50px] right-[50px] rounded-xl shadow bg-green-200"></div>
+        <div class="w-[50px] h-[50px] absolute top-[25px] left-[25px] shadow bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full"></div>
+        <div class="w-[50px] h-[50px] absolute bottom-[25px] right-[25px] shadow bg-gradient-to-t from-green-400 to-emerald-300 rounded-full"></div>
+      </div>
     </div>
   </div>
   <div #mainContent class="col-span-2">
     <router-outlet></router-outlet>
   </div>
   <div #rightSideBar class="col-span-1 h-screen overflow-y-auto overflow-x-hidden">
-    <div #stories></div>
+    <div #stories>
+      <h3>Stories</h3>
+      <div>Coming soon (24h status with green avatar ring)</div>
+    </div>
     <div #suggestions></div>
     <div #recommendations></div>
     <div class="flex items-center gap-2">

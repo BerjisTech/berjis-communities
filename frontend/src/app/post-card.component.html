@@ -1,4 +1,4 @@
-<article class="rounded-lg p-3 my-2 bg-white dark:bg-slate-800" [style.marginLeft.px]="depth * 24">
+<article class="rounded-lg p-3 my-2 bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-slate-200" [style.marginLeft.px]="depth * 24">
   <div class="flex items-center justify-between gap-3 mb-2">
     <div class="flex items-center gap-3">
       <div class="relative group" (mouseenter)="showUserPopover = true" (mouseleave)="showUserPopover = false">
@@ -59,12 +59,12 @@
     </ng-container>
   </div>
 
-  <div class="mt-2 flex items-center gap-4 text-sm text-gray-700">
-    <button class="px-2 py-1 rounded hover:bg-gray-100" (click)="toggleLike()">👍 {{ post.like_count || 0 }}</button>
-    <button class="px-2 py-1 rounded hover:bg-gray-100" (click)="toggleComments()">💬 {{ post.comment_count ?? comments.length }}</button>
-    <button class="px-2 py-1 rounded hover:bg-gray-100" (click)="recordView()">👁️ {{ post.view_count || 0 }}</button>
+  <div class="mt-2 flex items-center gap-1 text-sm text-gray-700">
+    <button class="p-1 rounded hover:bg-gray-100" (click)="toggleLike()">👍 {{ post.like_count || 0 }}</button>
+    <button class="p-1 rounded hover:bg-gray-100" (click)="toggleComments()">💬 {{ post.comment_count ?? comments.length }}</button>
+    <!-- <button class="p-1 rounded hover:bg-gray-100" (click)="recordView()">👁️ {{ post.view_count || 0 }}</button> -->
     <div class="relative" (mouseleave)="reactionMenuOpen = false">
-      <button class="px-2 py-1 rounded hover:bg-gray-100" (click)="toggleReactionMenu($event)">
+      <button class="p-1 rounded hover:bg-gray-100" (click)="toggleReactionMenu($event)">
         😃 {{ post.reaction_count || 0 }}
       </button>
       <div *ngIf="reactionMenuOpen" class="absolute z-30 mt-1 p-1 bg-white border border-gray-200 rounded shadow">
