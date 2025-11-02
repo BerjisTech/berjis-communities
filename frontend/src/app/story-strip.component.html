@@ -11,18 +11,18 @@
         </div>
       </div>
       <!-- Story card -->
-      <div *ngIf="it.type === 'story'" class="flex-none w-[120px] h-[200px] rounded-xl border border-slate-200 bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
+      <div *ngIf="it.type === 'story'" class="relative flex-none w-[120px] h-[200px] rounded-xl border border-slate-200 bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
+        <div class="absolute top-1 right-1 text-[10px] px-1.5 py-0.5 rounded-full bg-black/70 text-white" *ngIf="(it.story_count || 0) > 1">{{ it.story_count }}</div>
         <div class="w-full h-[160px] bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden">
           <img *ngIf="it.media?.length && it.media[0]?.kind === 'image'" [src]="it.media[0]?.url" alt="story" class="object-cover w-full h-full" />
           <video *ngIf="it.media?.length && it.media[0]?.kind === 'video'" [src]="it.media[0]?.url" class="object-cover w-full h-full" muted autoplay loop playsinline></video>
           <img *ngIf="!it.media?.length" [src]="avatarFor(it.user_id)" class="w-24 h-24 rounded-full"/>
         </div>
         <div class="h-[40px] px-2 text-xs truncate flex items-center gap-1">
-          <img [src]="avatarFor(it.user_id)" class="w-5 h-5 rounded-full"/>
+          <app-user-avatar [id]="it.user_id" [src]="avatarFor(it.user_id)" [size]="20"></app-user-avatar>
           <span class="truncate">{{ nameFor(it.user_id) || 'User' }}</span>
         </div>
       </div>
     </ng-container>
   </div>
 </div>
-

@@ -1,7 +1,7 @@
 <div class="grid grid-cols-4 h-screen w-full overflow-hidden p-0 m-0">
   <div #leftSideBar class="col-span-1 h-screen overflow-y-auto overflow-x-hidden">
     <div #userAvatar class="h-[200px] flex items-center justify-center" *ngIf="currentUser">
-      <img [src]="userAvatar" alt="Profile avatar" class="w-[150px] h-[150px] rounded-full shadow object-cover bg-slate-200" />
+      <app-user-avatar [id]="currentUser?.id || currentUser?.uuid" [src]="userAvatar" [size]="150"></app-user-avatar>
     </div>
     <div class="flex items-center justify-center gap-6 py-2" *ngIf="currentUser">
       <button class="text-center" (click)="openFollowers()">
@@ -22,7 +22,7 @@
       <span class="font-light text-slate-600" *ngIf="userHandle">{{ userHandle }}</span>
     </div>
     <div #navLinksRef
-      class="h-[calc(100vh-550px)] w-[300px] mx-auto overflow-y-auto overflow-x-hidden flex flex-col px-2">
+      class="h-[calc(100vh-650px)] !min-h-[400px] w-[300px] mx-auto overflow-y-auto overflow-x-hidden flex flex-col px-2">
       <a *ngIf="!currentUser" href="http://berjis.tech/account" class="rounded-lg p-3 mb-2 flex items-center justify-center gap-2 w-full bg-blue-600 text-white">
         <span class="material-symbols-outlined">login</span>
         <span>Sign In</span>

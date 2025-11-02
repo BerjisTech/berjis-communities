@@ -1,0 +1,16 @@
+/* Neon animated ring when user has active stories */
+@keyframes neonPulse {
+  0% { box-shadow: 0 0 0 2px rgba(59,130,246,0.6), 0 0 8px rgba(59,130,246,0.8); }
+  50% { box-shadow: 0 0 0 2px rgba(59,130,246,0.9), 0 0 16px rgba(59,130,246,0.9); }
+  100% { box-shadow: 0 0 0 2px rgba(59,130,246,0.6), 0 0 8px rgba(59,130,246,0.8); }
+}
+
+.story-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  border: 2px solid #3b82f6; /* Tailwind blue-500 */
+  animation: neonPulse 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+

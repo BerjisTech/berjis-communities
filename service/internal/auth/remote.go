@@ -2,6 +2,7 @@ package auth
 
 import (
     "encoding/json"
+    "fmt"
     "io"
     "net/http"
     "strings"
@@ -57,6 +58,12 @@ func Middleware(opts Options) fiber.Handler {
                 if user, ok := data["user"].(map[string]any); ok {
                     if id, ok := user["id"].(string); ok { c.Locals(userKey, id) }
                 }
+                // UUID-first from core verify
+                if uuid, ok := data["uuid"].(string); ok && uuid != "" { c.Locals(userKey, uuid) }
+                // numeric uid fallback
+                if uidNumber, ok := data["uid"].(float64); ok && uidNumber > 0 {
+                    c.Locals(userKey, fmt.Sprintf("%.0f", uidNumber))
+                }
             }
             if user, ok := body["user"].(map[string]any); ok {
                 if id, ok := user["id"].(string); ok { c.Locals(userKey, id) }
@@ -75,4 +82,3 @@ func UserID(c *fiber.Ctx) string {
     }
     return ""
 }
-

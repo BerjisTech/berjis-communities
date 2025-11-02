@@ -1,5 +1,5 @@
 <main class="max-w-4xl mx-auto p-6 h-[100vh] overflow-x-hidden overflow-y-auto">
-  <app-post-create></app-post-create>
+  <app-post-create (posted)="onPosted($event)"></app-post-create>
   <section>
     <div class="sticky top-[-25px] z-50 flex items-center justify-between bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 px-2 py-3">
       <div class="font-black text-xl">Feed</div>

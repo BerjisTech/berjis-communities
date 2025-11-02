@@ -3,11 +3,12 @@ import { AfterViewInit, Component, OnInit } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { ApiService } from './api.service';
 import { StoryStripComponent } from './story-strip.component';
+import { UserAvatarComponent } from './user-avatar.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, StoryStripComponent],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, StoryStripComponent, UserAvatarComponent],
   templateUrl: './app.component.html'
 })
 export class AppComponent implements OnInit, AfterViewInit {
@@ -23,6 +24,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   public usersMini: Record<string, any> = {};
   public showFollowers = false;
   public showFollowing = false;
+  private miniForMe: any | null = null;
   public navLinks: { name: string, url: string, icon?: string }[] = [
     { name: "Feed", url: "/", icon: "view_day" },
     { name: "Explore", url: "/explore", icon: "explore" },
@@ -70,15 +72,12 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   get userAvatar(): string {
-    if (!this.currentUser) {
-      return this.placeholderAvatar('guest');
-    }
-    return (
-      this.currentUser.avatarUrl ||
-      this.currentUser.avatar_url ||
-      this.currentUser.avatar ||
-      this.placeholderAvatar(this.currentUser.id || this.currentUser.uuid || this.userDisplayName)
+    const src = (
+      this.miniForMe?.avatarUrl || this.miniForMe?.avatar_url || this.miniForMe?.avatar ||
+      this.currentUser?.avatarUrl || this.currentUser?.avatar_url || this.currentUser?.avatar
     );
+    if (src && String(src).trim().length) return src;
+    return this.placeholderAvatar(this.currentUser?.id || this.currentUser?.uuid || this.userDisplayName || 'guest');
   }
 
   private applyTheme() {
@@ -91,6 +90,16 @@ export class AppComponent implements OnInit, AfterViewInit {
     try {
       const me = await this.api.currentUser();
       this.currentUser = me;
+      // Pull a unified mini profile for consistent avatar fields
+      const uid = (me?.id || me?.uuid || '').toString();
+      if (uid) {
+        this.api.usersMini([uid]).subscribe({
+          next: (res) => {
+            const arr = (res as any)?.data || res || [];
+            this.miniForMe = Array.isArray(arr) && arr.length ? arr[0] : null;
+          }
+        });
+      }
       if (me && (me.id || me.uuid)) {
         const uid = (me.id || me.uuid).toString();
         // Load counts and lists

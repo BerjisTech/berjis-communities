@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, Input, ViewChild, ElementRef } from '@angular/core';
+import { Component, ChangeDetectionStrategy, Input, ViewChild, ElementRef, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder } from '@angular/forms';
 import { ApiService } from './api.service';
@@ -15,6 +15,7 @@ export class PostCreateComponent {
   @Input() communityId?: number;
   @Input() groupId?: number;
   @ViewChild('bodyArea') bodyArea?: ElementRef<HTMLTextAreaElement>;
+  @Output() posted = new EventEmitter<any>();
 
   form = this.fb.group({
     title: [''],
@@ -86,7 +87,32 @@ export class PostCreateComponent {
 
     this.state$ = of({ submitting: true, message: '', error: '' }).pipe(
       switchMap(() => this.api.createPostGeneric(payload).pipe(
-        map(() => ({ submitting: false, message: 'Posted successfully', error: '' })),
+        map((res) => {
+          // Optimistically inject a post at top of feed
+          const id = (res as any)?.data?.id || 0;
+          const now = new Date().toISOString();
+          const me = this.api['meCache']?.data || {};
+          const user_id = (me?.id || me?.uuid || '').toString();
+          const newPost: any = {
+            id,
+            title: payload.title || '',
+            body: payload.body || '',
+            user_id,
+            kind: payload.kind || 'post',
+            created_at: now,
+            community_id: payload.community_id || null,
+            group_id: payload.group_id || null,
+            like_count: 0,
+            reaction_count: 0,
+            comment_count: 0,
+            media: payload.media || []
+          };
+          this.posted.emit(newPost);
+          // Clear form/uploads
+          this.form.reset({ title: '', body: '', visibility: this.communityId || this.groupId ? 'public' : 'public' });
+          this.uploads = [];
+          return ({ submitting: false, message: 'Posted successfully', error: '' });
+        }),
         catchError((err) => of({ submitting: false, message: '', error: err?.error?.message || 'Failed to post' }))
       )),
       shareReplay(1)
@@ -107,4 +133,3 @@ export class PostCreateComponent {
   }
   removeUpload(i: number) { this.uploads.splice(i, 1); }
 }
-

@@ -1,17 +1,17 @@
-<article class="rounded-lg p-3 my-2 bg-white dark:bg-slate-800 shadow text-slate-900 dark:text-slate-200" [style.marginLeft.px]="depth * 24">
+<article class="rounded-lg p-3 my-2 card shadow text-slate-200" [style.marginLeft.px]="depth * 24">
   <div class="flex items-center justify-between gap-3 mb-2">
     <div class="flex items-center gap-3">
       <div class="relative group" (mouseenter)="showUserPopover = true" (mouseleave)="showUserPopover = false">
-        <a [href]="'/u/' + (userName(post.user_id) || ('u' + post.user_id))" class="block h-[30px] w-[30px]">
-          <img [src]="avatarUrl(post.user_id)" alt="avatar" class="h-[30px] w-[30px] rounded-full object-cover bg-gray-200" />
+        <a [href]="'/u/' + (userName(post.user_id) || 'user')" class="block h-[30px] w-[30px]">
+          <app-user-avatar [id]="post.user_id" [src]="avatarUrl(post.user_id)" [size]="30"></app-user-avatar>
         </a>
         <div *ngIf="showUserPopover"
              class="hidden group-hover:block absolute z-20 mt-2 p-3 w-64 border border-gray-200 rounded-lg bg-white shadow-lg dark:bg-slate-900">
           <div class="flex items-center gap-2 mb-2">
-            <img [src]="avatarUrl(post.user_id)" class="h-10 w-10 rounded-full object-cover bg-gray-200" />
+            <app-user-avatar [id]="post.user_id" [src]="avatarUrl(post.user_id)" [size]="40"></app-user-avatar>
             <div>
               <div class="font-semibold">{{ fullName(post.user_id) || userName(post.user_id) || ('u' + post.user_id) }}</div>
-              <div class="text-sm text-gray-500">&#64;{{ userName(post.user_id) || ('u' + post.user_id) }}</div>
+              <div class="text-sm text-gray-500">&#64;{{ userName(post.user_id) || 'user' }}</div>
             </div>
           </div>
           <div class="text-sm mb-2" *ngIf="bio(post.user_id)">{{ bio(post.user_id) }}</div>
@@ -23,16 +23,16 @@
         </div>
       </div>
       <div class="flex flex-col">
-        <a [href]="'/u/' + (userName(post.user_id) || ('u' + post.user_id))" class="font-medium hover:underline">
-          {{ userName(post.user_id) || ('u' + post.user_id) }}
+        <a [href]="'/u/' + (userName(post.user_id) || 'user')" class="font-medium hover:underline">
+          {{ (userName(post.user_id) ? '@' + userName(post.user_id) : 'User') }}
         </a>
         <span class="text-xs text-gray-500">{{ timeAgo(post.created_at) }}</span>
       </div>
     </div>
     <div class="relative" (mouseleave)="moreMenuOpen = false">
-      <button class="px-2 py-1 rounded hover:bg-gray-100" (click)="$event.stopPropagation(); moreMenuOpen = !moreMenuOpen">?</button>
+      <button class="px-2 py-1 rounded hover:bg-slate-800" (click)="$event.stopPropagation(); moreMenuOpen = !moreMenuOpen">?</button>
       <div *ngIf="moreMenuOpen"
-           class="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-30">
+           class="absolute right-0 mt-1 w-40 card rounded-md shadow-lg z-30">
         <button class="block w-full text-left px-3 py-2 hover:bg-gray-50">Report</button>
         <button class="block w-full text-left px-3 py-2 hover:bg-gray-50">Not interested</button>
         <button class="block w-full text-left px-3 py-2 hover:bg-gray-50">Block user</button>
@@ -59,15 +59,15 @@
     </ng-container>
   </div>
 
-  <div class="mt-2 flex items-center gap-1 text-sm text-gray-700">
-    <button class="p-1 rounded hover:bg-gray-100" (click)="toggleLike()">👍 {{ post.like_count || 0 }}</button>
-    <button class="p-1 rounded hover:bg-gray-100" (click)="toggleComments()">💬 {{ post.comment_count ?? comments.length }}</button>
-    <!-- <button class="p-1 rounded hover:bg-gray-100" (click)="recordView()">👁️ {{ post.view_count || 0 }}</button> -->
+  <div class="mt-2 flex items-center gap-1 text-sm text-slate-300">
+    <button class="p-1 rounded hover:bg-slate-800" (click)="toggleLike()">👍 {{ post.like_count || 0 }}</button>
+    <button class="p-1 rounded hover:bg-slate-800" (click)="toggleComments()">💬 {{ post.comment_count ?? comments.length }}</button>
+    <!-- <button class="p-1 rounded hover:bg-slate-800" (click)="recordView()">👁️ {{ post.view_count || 0 }}</button> -->
     <div class="relative" (mouseleave)="reactionMenuOpen = false">
-      <button class="p-1 rounded hover:bg-gray-100" (click)="toggleReactionMenu($event)">
+      <button class="p-1 rounded hover:bg-slate-800" (click)="toggleReactionMenu($event)">
         😃 {{ post.reaction_count || 0 }}
       </button>
-      <div *ngIf="reactionMenuOpen" class="absolute z-30 mt-1 p-1 bg-white border border-gray-200 rounded shadow">
+      <div *ngIf="reactionMenuOpen" class="absolute z-30 mt-1 p-1 card rounded shadow">
         <button class="px-2" *ngFor="let emoji of emojis" (click)="react(emoji)">{{ emoji }}</button>
       </div>
     </div>
@@ -127,3 +127,4 @@
     </div>
   </div>
 </article>
+

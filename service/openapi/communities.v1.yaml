@@ -859,3 +859,14 @@ components:
           schema: { type: string, format: uuid }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+  /v1/users/by-username/{username}:
+    get:
+      tags: [users]
+      summary: Resolve username to user
+      parameters:
+        - in: path
+          name: username
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }

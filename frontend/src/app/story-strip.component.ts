@@ -2,11 +2,12 @@ import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from './api.service';
+import { UserAvatarComponent } from './user-avatar.component';
 
 @Component({
   selector: 'app-story-strip',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, UserAvatarComponent],
   templateUrl: './story-strip.component.html'
 })
 export class StoryStripComponent implements OnInit {
@@ -93,4 +94,3 @@ export class StoryStripComponent implements OnInit {
     return `https://api.dicebear.com/7.x/identicon/svg?seed=${seed}`;
   }
 }
-

@@ -13,6 +13,7 @@ import { PostCreateComponent } from './app/post-create.component';
 import { CommunityCreateComponent } from './app/community-create.component';
 import { GroupCreateComponent } from './app/group-create.component';
 import { UserPostsComponent } from './app/user-posts.component';
+import { UserPublicPostsComponent } from './app/user-public-posts.component';
 
 const routes: Routes = [
   { path: '', component: HomeComponent },
@@ -24,6 +25,7 @@ const routes: Routes = [
   { path: 'g/:slug', component: GroupPageComponent },
   { path: 'c/:slug', component: CommunityPageComponent },
   { path: 'u/:username', component: UserPageComponent },
+  { path: 'u/:username/posts', component: UserPublicPostsComponent },
   { path: 'me/posts', component: UserPostsComponent },
   { path: 'create', component: PostCreateComponent },
 ];

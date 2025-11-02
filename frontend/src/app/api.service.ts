@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { Observable, firstValueFrom, from, throwError } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
 import { environment } from '../environments/environment';
 
 type MiniUser = Record<string, any>;
@@ -27,53 +28,99 @@ export class ApiService {
     return h;
   }
 
+  // Common request helpers with 401 refresh+retry exactly once
+  private addCommonOptions(opts?: { headers?: HttpHeaders; withCredentials?: boolean }): { headers: HttpHeaders; withCredentials: boolean } {
+    const base = { headers: this.headers(), withCredentials: true } as { headers: HttpHeaders; withCredentials: boolean };
+    if (opts?.headers) base.headers = opts.headers;
+    if (typeof opts?.withCredentials === 'boolean') base.withCredentials = opts.withCredentials;
+    return base;
+  }
+
+  private refreshAccess(): Promise<void> {
+    return firstValueFrom(this.http.post<{ success?: boolean; data?: any }>(`${this.coreBase}/v1/auth/refresh`, {}, { withCredentials: true }))
+      .then(res => {
+        const token = (res as any)?.data?.access || (res as any)?.access;
+        if (typeof token === 'string' && token.length) {
+          localStorage.setItem('accessToken', token);
+        }
+      })
+      .catch(() => {});
+  }
+
+  private withRetry<T>(factory: () => Observable<T>): Observable<T> {
+    let retried = false;
+    return factory().pipe(
+      catchError((err: any) => {
+        const status = err?.status ?? err?.statusCode;
+        if (status === 401 && !retried) {
+          retried = true;
+          return from(this.refreshAccess()).pipe(switchMap(() => factory()));
+        }
+        return throwError(() => err);
+      })
+    );
+  }
+
+  private get<T>(url: string, opts?: { headers?: HttpHeaders; withCredentials?: boolean }) {
+    const o = this.addCommonOptions(opts);
+    return this.withRetry<T>(() => this.http.get<T>(url, o));
+  }
+  private post<T>(url: string, body: any, opts?: { headers?: HttpHeaders; withCredentials?: boolean }) {
+    const o = this.addCommonOptions(opts);
+    return this.withRetry<T>(() => this.http.post<T>(url, body, o));
+  }
+  private delete<T>(url: string, opts?: { headers?: HttpHeaders; withCredentials?: boolean }) {
+    const o = this.addCommonOptions(opts);
+    return this.withRetry<T>(() => this.http.delete<T>(url, o));
+  }
+
   feedPublic(limit = 50) {
-    return this.http.get<{ success: boolean; data: any[]; message: string }>(`${this.svcBase()}/v1/feed/public?limit=${limit}`);
+    return this.get<{ success: boolean; data: any[]; message: string }>(`${this.svcBase()}/v1/feed/public?limit=${limit}`);
   }
 
   explore(tag: string) {
     const t = tag.startsWith('#') ? tag.substring(1) : tag;
-    return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/explore?tag=${encodeURIComponent(t)}`);
+    return this.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/explore?tag=${encodeURIComponent(t)}`);
   }
 
   listCommunities() {
-    return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/communities`);
+    return this.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/communities`);
   }
 
   getCommunityBySlug(slug: string) {
-    return this.http.get<{ success: boolean; data: any }>(`${this.svcBase()}/v1/communities/by-slug/${encodeURIComponent(slug)}`);
+    return this.get<{ success: boolean; data: any }>(`${this.svcBase()}/v1/communities/by-slug/${encodeURIComponent(slug)}`);
   }
 
   listGroups() {
-    return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/groups`);
+    return this.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/groups`);
   }
 
   getGroupBySlug(slug: string) {
-    return this.http.get<{ success: boolean; data: any }>(`${this.svcBase()}/v1/groups/by-slug/${encodeURIComponent(slug)}`);
+    return this.get<{ success: boolean; data: any }>(`${this.svcBase()}/v1/groups/by-slug/${encodeURIComponent(slug)}`);
   }
 
   createCommunity(body: { name: string; slug: string; description?: string; visibility?: string; access?: string; hashtags?: string[] }) {
-    return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/communities`, body, { headers: this.headers() });
+    return this.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/communities`, body);
   }
 
   createGroup(body: { name: string; slug: string; description?: string; visibility?: string }) {
-    return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/groups`, body, { headers: this.headers() });
+    return this.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/groups`, body);
   }
 
   joinCommunity(id: number) {
-    return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${id}/join`, {}, { headers: this.headers() });
+    return this.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${id}/join`, {});
   }
 
   joinGroup(id: number) {
-    return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/groups/${id}/join`, {}, { headers: this.headers() });
+    return this.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/groups/${id}/join`, {});
   }
 
   createPostGeneric(body: { title?: string; body?: string; kind?: string; visibility?: 'public' | 'private'; community_id?: number; channel_id?: number; group_id?: number; parent_post_id?: number; hashtags?: string[] }) {
-    return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts`, body, { headers: this.headers() });
+    return this.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts`, body);
   }
 
   tagsSuggest(q: string, limit = 10) {
-    return this.http.get<{ success: boolean; data: { name: string; count: number }[] }>(`${this.svcBase()}/v1/tags/suggest?q=${encodeURIComponent(q)}&limit=${limit}`);
+    return this.get<{ success: boolean; data: { name: string; count: number }[] }>(`${this.svcBase()}/v1/tags/suggest?q=${encodeURIComponent(q)}&limit=${limit}`);
   }
 
   async currentUser(force = false): Promise<any | null> {
@@ -101,81 +148,89 @@ export class ApiService {
   }
 
   usersMini(ids: Array<string | number>) {
+    const isUUID = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+    const uniq = Array.from(new Set(
+      ids
+        .map(id => (id ?? '').toString().trim())
+        .filter(id => id.length > 0 && isUUID(id))
+    ));
+    const query = uniq.map(id => encodeURIComponent(id)).join(',');
+    return this.get<{ success: boolean; data: MiniUser[] }>(`${this.svcBase()}/v1/users/mini?ids=${encodeURIComponent(query)}`);
+  }
+
+  // Stories
+  listStories() {
+    return this.get<{ success: boolean; data: { own: any[]; others: any[] } }>(`${this.svcBase()}/v1/stories`);
+  }
+  storiesHas(ids: Array<string | number>) {
     const uniq = Array.from(new Set(
       ids
         .map(id => (id ?? '').toString().trim())
         .filter(id => id.length > 0)
     ));
-    const query = uniq.map(id => encodeURIComponent(id)).join(',');
-    return this.http.get<{ success: boolean; data: MiniUser[] }>(
-      `${this.svcBase()}/v1/users/mini?ids=${encodeURIComponent(query)}`,
-      { headers: this.headers(), withCredentials: true }
-    );
-  }
-
-  // Stories
-  listStories() {
-    return this.http.get<{ success: boolean; data: { own: any[]; others: any[] } }>(`${this.svcBase()}/v1/stories`, { headers: this.headers() });
+    if (!uniq.length) return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/stories/has?ids=`);
+    const q = encodeURIComponent(uniq.join(','));
+    return this.get<{ success: boolean; data: { user_id: string; count: number }[] }>(`${this.svcBase()}/v1/stories/has?ids=${q}`);
   }
 
   createStory(caption: string, media: Array<{ url: string; kind: string }>) {
     const payload: any = { kind: 'story', visibility: 'public', body: caption || '', media };
-    return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts`, payload, { headers: this.headers() });
+    return this.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts`, payload);
   }
 
   // Follow graph
   follow(userId: string) {
-    return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/users/${userId}/follow`, {}, { headers: this.headers() });
+    return this.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/users/${userId}/follow`, {});
   }
   unfollow(userId: string) {
-    return this.http.delete<{ success: boolean; message: string }>(`${this.svcBase()}/v1/users/${userId}/follow`, { headers: this.headers() });
+    return this.delete<{ success: boolean; message: string }>(`${this.svcBase()}/v1/users/${userId}/follow`);
   }
   removeFollower(userId: string, followerId: string) {
-    return this.http.delete<{ success: boolean; message: string }>(`${this.svcBase()}/v1/users/${userId}/followers/${followerId}`, { headers: this.headers() });
+    return this.delete<{ success: boolean; message: string }>(`${this.svcBase()}/v1/users/${userId}/followers/${followerId}`);
   }
   followers(userId: string) {
-    return this.http.get<{ success: boolean; data: string[] }>(`${this.svcBase()}/v1/users/${userId}/followers`, { headers: this.headers() });
+    return this.get<{ success: boolean; data: string[] }>(`${this.svcBase()}/v1/users/${userId}/followers`);
   }
   following(userId: string) {
-    return this.http.get<{ success: boolean; data: string[] }>(`${this.svcBase()}/v1/users/${userId}/following`, { headers: this.headers() });
+    return this.get<{ success: boolean; data: string[] }>(`${this.svcBase()}/v1/users/${userId}/following`);
   }
 
   // User posts
   userPosts(userId: string, limit = 50) {
-    return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/users/${userId}/posts?limit=${limit}`);
+    return this.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/users/${userId}/posts?limit=${limit}`);
   }
   postsCount(userId: string) {
-    return this.http.get<{ success: boolean; data: { count: number } }>(`${this.svcBase()}/v1/users/${userId}/posts/count`);
+    return this.get<{ success: boolean; data: { count: number } }>(`${this.svcBase()}/v1/users/${userId}/posts/count`);
   }
 
   likePost(id: number) {
-    return this.http.post<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`, {}, { headers: this.headers() });
+    return this.post<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`, {});
   }
 
   unlikePost(id: number) {
-    return this.http.delete<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`, { headers: this.headers() });
+    return this.delete<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`);
   }
 
   reactPost(id: number, emoji: string) {
-    return this.http.post<{ success: boolean; data: { reaction_count: number } }>(`${this.svcBase()}/v1/posts/${id}/react`, { emoji }, { headers: this.headers() });
+    return this.post<{ success: boolean; data: { reaction_count: number } }>(`${this.svcBase()}/v1/posts/${id}/react`, { emoji });
   }
 
   unreactPost(id: number, emoji: string) {
-    return this.http.delete<{ success: boolean; data: { reaction_count: number } }>(`${this.svcBase()}/v1/posts/${id}/react?emoji=${encodeURIComponent(emoji)}`, { headers: this.headers() });
+    return this.delete<{ success: boolean; data: { reaction_count: number } }>(`${this.svcBase()}/v1/posts/${id}/react?emoji=${encodeURIComponent(emoji)}`);
   }
 
   viewPost(id: number) {
-    return this.http.post<{ success: boolean; data: { view_count: number } }>(`${this.svcBase()}/v1/posts/${id}/view`, {});
+    return this.post<{ success: boolean; data: { view_count: number } }>(`${this.svcBase()}/v1/posts/${id}/view`, {});
   }
 
   listComments(postId: number) {
-    return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/posts/${postId}/comments`);
+    return this.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/posts/${postId}/comments`);
   }
 
   createComment(postId: number, body: string, parent_comment_id?: number) {
     const payload: any = { body };
     if (parent_comment_id) payload.parent_comment_id = parent_comment_id;
-    return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts/${postId}/comments`, payload, { headers: this.headers() });
+    return this.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts/${postId}/comments`, payload);
   }
 
   upload(file: File) {
@@ -186,23 +241,23 @@ export class ApiService {
     if (token) { h = h.set('Authorization', `Bearer ${token}`); }
     const devUser = localStorage.getItem('devUserId');
     if (devUser) { h = h.set('X-User-ID', devUser); }
-    return this.http.post<{ success: boolean; data: { url: string; kind: 'image' | 'video' | 'other' } }>(`${this.svcBase()}/v1/uploads`, fd, { headers: h });
+    return this.post<{ success: boolean; data: { url: string; kind: 'image' | 'video' | 'other' } }>(`${this.svcBase()}/v1/uploads`, fd, { headers: h });
   }
 
   setCommunityMemberRole(communityId: number, userId: string, role: 'admin' | 'member') {
-    return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${communityId}/members/${userId}/role`, { role }, { headers: this.headers() });
+    return this.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${communityId}/members/${userId}/role`, { role });
   }
 
   communityBan(communityId: number, userId: string, action: 'ban' | 'unban') {
-    return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${communityId}/bans/${userId}`, { action }, { headers: this.headers() });
+    return this.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${communityId}/bans/${userId}`, { action });
   }
 
   setGroupMemberRole(groupId: number, userId: string, role: 'admin' | 'mod' | 'member') {
-    return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/groups/${groupId}/members/${userId}/role`, { role }, { headers: this.headers() });
+    return this.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/groups/${groupId}/members/${userId}/role`, { role });
   }
 
   groupBan(groupId: number, userId: string, action: 'ban' | 'unban') {
-    return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/groups/${groupId}/bans/${userId}`, { action }, { headers: this.headers() });
+    return this.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/groups/${groupId}/bans/${userId}`, { action });
   }
 }
 

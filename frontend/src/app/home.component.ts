@@ -17,13 +17,13 @@ export class HomeComponent implements OnInit {
   users: Record<string, any> = {};
   emojis = ['👍', '❤️', '😂', '🎉', '😢'];
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService) { }
 
   ngOnInit() {
     this.api.currentUser().then(user => {
       const key = this.userKey(user?.id ?? user?.uuid);
       if (key) this.users[key] = user;
-    }).catch(() => {});
+    }).catch(() => { });
 
     this.api.feedPublic(50).pipe(
       map((response) => response.data || [])
@@ -56,4 +56,16 @@ export class HomeComponent implements OnInit {
     const value = source.toString().trim();
     return value;
   }
+  onPosted(newPost: any) {
+    if (!newPost) return;
+    this.posts = [newPost, ...this.posts];
+    const uid = this.userKey(newPost.user_id);
+    if (uid && !this.users[uid]) {
+      this.api.currentUser().then((me) => {
+        const key = this.userKey(me?.id ?? me?.uuid);
+        if (key) this.users[key] = me;
+      }).catch(() => { });
+    }
+  }
 }
+
