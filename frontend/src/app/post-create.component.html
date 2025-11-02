@@ -1,17 +1,18 @@
-<form [formGroup]="form" (ngSubmit)="onSubmit()" class="bg-pink-100 rounded-lg p-3 shadow">
+<form [formGroup]="form" (ngSubmit)="onSubmit()"
+  class="bg-linear-to-tr from-blue-900 to-slate-900 rounded-lg p-3 shadow text-shadow-gray-900 text-slate-100 mb-2">
   <input formControlName="title" placeholder="Title (optional for text-only)"
-    class="bg-slate-50 w-full shadow rounded p-2 houtline-none focus:outline-none hidden">
-  <div style="position:relative">
+    class="bg-slate-950 w-full shadow rounded p-2 houtline-none focus:outline-none hidden">
+  <div class="relative">
     <textarea #bodyArea rows="6" formControlName="body" (input)="onBodyInput($event)"
       placeholder="Write something... type # to add tags"
-      class="bg-slate-50 w-full shadow rounded p-2 h-[50px] outline-none focus:outline-none"></textarea>
+      class="bg-slate-950 w-full shadow rounded p-2 h-[50px] outline-none focus:outline-none"></textarea>
     <ng-container *ngIf="(suggest$ | async) as sugg">
       <div *ngIf="sugg.length > 0"
-        style="position:absolute;left:8px;right:8px;bottom:-2px;transform:translateY(100%);background:white;border:1px solid #e5e7eb;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.06);z-index:10">
+        class="absolute left-[8px] right-[8px] bottom-[-2px] transform translate-y-[100%] bg-white border-[1px] border-solid border-[#e5e7eb] rounded-[6px] box-shadow-[0_4px_12px_rgba(0,0,0,0.06)] z-[10]">
         <div *ngFor="let s of sugg" (click)="insertTag(s.name)"
-          style="padding:6px 8px;display:flex;justify-content:space-between;cursor:pointer">
+          class="px-[6px] py-[8px] flex justify-between cursor-pointer">
           <span>#{{s.name}}</span>
-          <small style="color:#6b7280">{{s.count}}</small>
+          <small class="text-[#6b7280]">{{s.count}}</small>
         </div>
       </div>
     </ng-container>
@@ -23,7 +24,7 @@
       <div class="flex items-center gap-2"><span class="material-symbols-outlined">image_inset</span> Media
       </div>
     </label>
-    <div *ngIf="!communityId && !groupId" style="display:grid;grid-template-columns:1fr;gap:12px">
+    <div *ngIf="!communityId && !groupId" class="grid grid-cols-1 gap-[12px]">
       <label class="flex items-center gap-2">
         <span class="material-symbols-outlined">Visibility</span>
         <select formControlName="visibility" class="border-none outline-none focus:outline-none">
@@ -41,9 +42,9 @@
     <div *ngFor="let u of uploads; let i = index" class="relative">
       <img *ngIf="u.kind!=='video'" [src]="u.url" class="w-full h-40 object-cover rounded" />
       <video *ngIf="u.kind==='video'" [src]="u.url" class="w-full h-40 object-cover rounded" controls></video>
-      <button class="absolute top-1 right-1 bg-white/80 rounded px-2" (click)="removeUpload(i)">x</button>
+      <button class="absolute top-1 right-1 bg-slate-700/80 rounded px-2" (click)="removeUpload(i)">x</button>
     </div>
   </div>
-  <div *ngIf="(state$ | async)?.message as m" style="color:#065f46">{{m}}</div>
-  <div *ngIf="(state$ | async)?.error as e" style="color:#991b1b">{{e}}</div>
+  <div *ngIf="(state$ | async)?.message as m" class="text-[#065f46]">{{m}}</div>
+  <div *ngIf="(state$ | async)?.error as e" class="text-[#991b1b]">{{e}}</div>
 </form>
