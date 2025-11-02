@@ -140,6 +140,14 @@ export class ApiService {
     return this.http.get<{ success: boolean; data: string[] }>(`${this.svcBase()}/v1/users/${userId}/following`, { headers: this.headers() });
   }
 
+  // User posts
+  userPosts(userId: string, limit = 50) {
+    return this.http.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/users/${userId}/posts?limit=${limit}`);
+  }
+  postsCount(userId: string) {
+    return this.http.get<{ success: boolean; data: { count: number } }>(`${this.svcBase()}/v1/users/${userId}/posts/count`);
+  }
+
   likePost(id: number) {
     return this.http.post<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`, {}, { headers: this.headers() });
   }

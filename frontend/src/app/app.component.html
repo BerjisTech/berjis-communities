@@ -3,6 +3,20 @@
     <div #userAvatar class="h-[200px] flex items-center justify-center" *ngIf="currentUser">
       <img [src]="userAvatar" alt="Profile avatar" class="w-[150px] h-[150px] rounded-full shadow object-cover bg-slate-200" />
     </div>
+    <div class="flex items-center justify-center gap-6 py-2" *ngIf="currentUser">
+      <button class="text-center" (click)="openFollowers()">
+        <div class="text-lg font-bold">{{ followerCount }}</div>
+        <div class="text-xs uppercase tracking-wide text-slate-500">Followers</div>
+      </button>
+      <button class="text-center" (click)="openFollowing()">
+        <div class="text-lg font-bold">{{ followingCount }}</div>
+        <div class="text-xs uppercase tracking-wide text-slate-500">Following</div>
+      </button>
+      <a class="text-center" routerLink="/me/posts">
+        <div class="text-lg font-bold">{{ postsCount }}</div>
+        <div class="text-xs uppercase tracking-wide text-slate-500">Posts</div>
+      </a>
+    </div>
     <div #userName class="flex flex-col items-center justify-center text-center" *ngIf="currentUser">
       <span class="font-black text-xl">{{ userDisplayName }}</span>
       <span class="font-light text-slate-600" *ngIf="userHandle">{{ userHandle }}</span>
@@ -52,3 +66,27 @@
     </div>
   </div>
 </div>
+
+<!-- Followers/Following Modal -->
+<div *ngIf="showFollowers || showFollowing" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  <div class="bg-white dark:bg-slate-900 w-[480px] max-h-[80vh] rounded-lg shadow-xl overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+      <div class="font-semibold">{{ showFollowers ? 'Followers' : 'Following' }}</div>
+      <button class="text-slate-500" (click)="closeModals()">✕</button>
+    </div>
+    <div class="overflow-y-auto max-h-[70vh]">
+      <div *ngFor="let id of (showFollowers ? followers : following)" class="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-3">
+          <img [src]="userAvatarById(id)" class="w-8 h-8 rounded-full"/>
+          <div class="text-sm">{{ userName(id) }}</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button *ngIf="showFollowers" class="text-xs px-2 py-1 rounded border" (click)="removeFollower(id)">Remove</button>
+          <button class="text-xs px-2 py-1 rounded" [ngClass]="isFollowing(id) ? 'bg-slate-200 dark:bg-slate-700' : 'bg-blue-600 text-white'" (click)="toggleFollow(id)">
+            {{ isFollowing(id) ? 'Following' : 'Follow' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>

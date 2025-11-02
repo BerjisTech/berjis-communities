@@ -14,6 +14,15 @@ export class AppComponent implements OnInit, AfterViewInit {
   public isDark = false;
   public currentUser: any | null = null;
   public userLoading = true;
+  public followerCount = 0;
+  public followingCount = 0;
+  public postsCount = 0;
+  public followers: string[] = [];
+  public following: string[] = [];
+  public followingSet = new Set<string>();
+  public usersMini: Record<string, any> = {};
+  public showFollowers = false;
+  public showFollowing = false;
   public navLinks: { name: string, url: string, icon?: string }[] = [
     { name: "Feed", url: "/", icon: "view_day" },
     { name: "Explore", url: "/explore", icon: "explore" },
@@ -82,6 +91,24 @@ export class AppComponent implements OnInit, AfterViewInit {
     try {
       const me = await this.api.currentUser();
       this.currentUser = me;
+      if (me && (me.id || me.uuid)) {
+        const uid = (me.id || me.uuid).toString();
+        // Load counts and lists
+        this.api.followers(uid).subscribe(res => {
+          this.followers = res.data || [];
+          this.followerCount = this.followers.length;
+          this.fetchUsersMini(this.followers);
+        });
+        this.api.following(uid).subscribe(res => {
+          this.following = res.data || [];
+          this.followingSet = new Set(this.following);
+          this.followingCount = this.following.length;
+          this.fetchUsersMini(this.following);
+        });
+        this.api.postsCount(uid).subscribe(res => {
+          this.postsCount = res?.data?.count ?? 0;
+        });
+      }
     } catch {
       this.currentUser = null;
     } finally {
@@ -92,5 +119,64 @@ export class AppComponent implements OnInit, AfterViewInit {
   private placeholderAvatar(seed: string): string {
     const value = encodeURIComponent(String(seed || 'member'));
     return `https://api.dicebear.com/7.x/identicon/svg?seed=${value}`;
+  }
+
+  // Followers modal helpers
+  openFollowers() { this.showFollowers = true; this.showFollowing = false; }
+  openFollowing() { this.showFollowing = true; this.showFollowers = false; }
+  closeModals() { this.showFollowers = false; this.showFollowing = false; }
+
+  isFollowing(id: string): boolean { return this.followingSet.has((id || '').toString()); }
+
+  toggleFollow(id: string) {
+    const uid = (id || '').toString();
+    if (!uid) return;
+    if (this.isFollowing(uid)) {
+      this.api.unfollow(uid).subscribe(() => {
+        this.followingSet.delete(uid);
+        this.following = this.following.filter(x => x !== uid);
+        this.followingCount = this.following.length;
+      });
+    } else {
+      this.api.follow(uid).subscribe(() => {
+        this.followingSet.add(uid);
+        if (!this.following.includes(uid)) this.following.push(uid);
+        this.followingCount = this.following.length;
+      });
+    }
+  }
+
+  removeFollower(id: string) {
+    const me = (this.currentUser?.id || this.currentUser?.uuid || '').toString();
+    const uid = (id || '').toString();
+    if (!me || !uid) return;
+    this.api.removeFollower(me, uid).subscribe(() => {
+      this.followers = this.followers.filter(x => x !== uid);
+      this.followerCount = this.followers.length;
+    });
+  }
+
+  userMini(id: string) { return this.usersMini[(id || '').toString()]; }
+  userName(id: string) {
+    const u = this.userMini(id);
+    return u?.name || u?.full_name || u?.username || u?.handle || (u?.email ? u.email.split('@')[0] : 'User');
+  }
+  userAvatarById(id: string) {
+    const u = this.userMini(id);
+    if (u?.avatarUrl) return u.avatarUrl;
+    if (u?.avatar_url) return u.avatar_url;
+    if (u?.avatar) return u.avatar;
+    return this.placeholderAvatar(id);
+  }
+  private fetchUsersMini(ids: string[]) {
+    const uniq = Array.from(new Set((ids || []).map(x => (x || '').toString()).filter(Boolean)));
+    if (!uniq.length) return;
+    this.api.usersMini(uniq).subscribe(res => {
+      const arr = (res as any)?.data || res;
+      for (const u of (arr || [])) {
+        const key = (u?.id ?? u?.uuid ?? '').toString();
+        if (key) this.usersMini[key] = u;
+      }
+    });
   }
 }

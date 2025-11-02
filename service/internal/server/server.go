@@ -127,7 +127,11 @@ func New(opts Options) *fiber.App {
 	app.Get("/v1/explore", func(c *fiber.Ctx) error { return exploreByTag(c, opts.DB) })
 
 	// Users mini proxy (to Core API)
-	app.Get("/v1/users/mini", func(c *fiber.Ctx) error { return usersMiniProxy(c, opts.CoreAPIBase) })
+    app.Get("/v1/users/mini", func(c *fiber.Ctx) error { return usersMiniProxy(c, opts.CoreAPIBase) })
+
+    // User posts
+    app.Get("/v1/users/:id/posts", func(c *fiber.Ctx) error { return listUserPosts(c, opts.DB) })
+    app.Get("/v1/users/:id/posts/count", func(c *fiber.Ctx) error { return countUserPosts(c, opts.DB) })
 
 	// Groups
 	app.Get("/v1/groups", func(c *fiber.Ctx) error { return listGroups(c, opts.DB) })
@@ -1021,6 +1025,49 @@ func isGroupMember(db *sqlx.DB, groupID int64, userID string) bool {
     var exists bool
     _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2)", groupID, userID)
     return exists
+}
+
+// List recent public posts by user (excludes expired stories)
+func listUserPosts(c *fiber.Ctx, db *sqlx.DB) error {
+    uid := strings.TrimSpace(c.Params("id"))
+    if _, err := uuid.Parse(uid); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    limit := 50
+    if v := strings.TrimSpace(c.Query("limit")); v != "" {
+        if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 { limit = n }
+    }
+    rows, err := db.Queryx(`
+        SELECT id, title, body, kind, created_at, community_id, group_id
+        FROM posts
+        WHERE user_id=$1 AND (expires_at IS NULL OR now() <= expires_at) AND visibility='public' AND kind IN ('post','repost','quote','reply')
+        ORDER BY id DESC
+        LIMIT $2
+    `, uid, limit)
+    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
+    defer rows.Close()
+    out := []map[string]any{}
+    for rows.Next() {
+        var id, communityID, groupID sql.NullInt64
+        var title, body, kind, createdAt sql.NullString
+        _ = rows.Scan(&id, &title, &body, &kind, &createdAt, &communityID, &groupID)
+        // media
+        media := []map[string]any{}
+        mrows, _ := db.Queryx("SELECT url, kind FROM posts_media WHERE post_id=$1 ORDER BY position ASC, id ASC LIMIT 6", id.Int64)
+        for mrows != nil && mrows.Next() { var url, mkind string; _ = mrows.Scan(&url, &mkind); media = append(media, fiber.Map{"url": url, "kind": mkind}) }
+        if mrows != nil { mrows.Close() }
+        out = append(out, fiber.Map{
+            "id": id.Int64, "title": title.String, "body": body.String, "user_id": uid, "kind": kind.String, "created_at": createdAt.String,
+            "community_id": communityID.Int64, "group_id": groupID.Int64, "media": media,
+        })
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": out})
+}
+
+func countUserPosts(c *fiber.Ctx, db *sqlx.DB) error {
+    uid := strings.TrimSpace(c.Params("id"))
+    if _, err := uuid.Parse(uid); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    var n int64
+    _ = db.Get(&n, `SELECT COUNT(*) FROM posts WHERE user_id=$1 AND (expires_at IS NULL OR now() <= expires_at) AND kind IN ('post','repost','quote','reply')`, uid)
+    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": map[string]any{"count": n}})
 }
 
 // Group bans and admin actions
