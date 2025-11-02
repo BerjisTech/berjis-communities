@@ -24,7 +24,7 @@ export class ApiService {
     const token = localStorage.getItem('accessToken');
     if (token) { h = h.set('Authorization', `Bearer ${token}`); }
     const devUser = localStorage.getItem('devUserId');
-    if (devUser) { h = h.set('X-User-ID', devUser); }
+    if (devUser) { h = h.set('X-User-UUID', devUser); }
     return h;
   }
 
@@ -240,7 +240,7 @@ export class ApiService {
     const token = localStorage.getItem('accessToken');
     if (token) { h = h.set('Authorization', `Bearer ${token}`); }
     const devUser = localStorage.getItem('devUserId');
-    if (devUser) { h = h.set('X-User-ID', devUser); }
+    if (devUser) { h = h.set('X-User-UUID', devUser); }
     return this.post<{ success: boolean; data: { url: string; kind: 'image' | 'video' | 'other' } }>(`${this.svcBase()}/v1/uploads`, fd, { headers: h });
   }
 

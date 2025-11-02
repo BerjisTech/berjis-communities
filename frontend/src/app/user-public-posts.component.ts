@@ -59,8 +59,7 @@ export class UserPublicPostsComponent implements OnInit {
     const token = localStorage.getItem('accessToken');
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const devUser = localStorage.getItem('devUserId');
-    if (devUser) headers['X-User-ID'] = devUser;
+    if (devUser) headers['X-User-UUID'] = devUser;
     return fetch(base + path, { headers, credentials: 'include' }).then(r => r.json());
   }
 }
-
