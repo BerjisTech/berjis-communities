@@ -35,7 +35,7 @@ export class CommunityPageComponent {
   }
 
   setRole(communityId: number, userId: string | number, role: 'admin' | 'member') {
-    const uid = Number(userId || 0);
+    const uid = (userId ?? '').toString().trim();
     if (!uid) { return; }
     this.vm$ = this.vm$.pipe(
       switchMap(vm => this.api.setCommunityMemberRole(communityId, uid, role).pipe(
@@ -47,7 +47,7 @@ export class CommunityPageComponent {
   }
 
   ban(communityId: number, userId: string | number, action: 'ban' | 'unban') {
-    const uid = Number(userId || 0);
+    const uid = (userId ?? '').toString().trim();
     if (!uid) { return; }
     this.vm$ = this.vm$.pipe(
       switchMap(vm => this.api.communityBan(communityId, uid, action).pipe(

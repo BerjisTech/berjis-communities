@@ -1,21 +1,22 @@
 package server
 
 import (
-	"database/sql"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"time"
+    "database/sql"
+    "io"
+    "net/http"
+    "os"
+    "path/filepath"
+    "strconv"
+    "strings"
+    "time"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/jmoiron/sqlx"
+    "github.com/gofiber/fiber/v2"
+    "github.com/gofiber/fiber/v2/middleware/cors"
+    "github.com/google/uuid"
+    "github.com/jmoiron/sqlx"
 
-	srvAuth "github.com/berjistech/berjis-ecosystem/communities/service/internal/auth"
-	"github.com/berjistech/berjis-ecosystem/communities/service/internal/billing"
+    srvAuth "github.com/berjistech/berjis-ecosystem/communities/service/internal/auth"
+    "github.com/berjistech/berjis-ecosystem/communities/service/internal/billing"
 )
 
 type Options struct {
@@ -224,8 +225,8 @@ func createCommunity(c *fiber.Ctx, db *sqlx.DB) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "insert failed"})
 	}
 	// make creator owner if identified
-	if uid := userIDFromContext(c); uid > 0 {
-		if _, err := tx.Exec("INSERT INTO community_members(community_id, user_id, role) VALUES ($1,$2,'owner') ON CONFLICT DO NOTHING", req.ID, uid); err != nil {
+    if uid := userIDFromContext(c); uid != "" {
+    if _, err := tx.Exec("INSERT INTO community_members(community_id, user_id, role) VALUES ($1,$2,'owner') ON CONFLICT DO NOTHING", req.ID, uid); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "owner assign failed"})
 		}
 	}
@@ -262,7 +263,7 @@ func joinCommunity(c *fiber.Ctx, db *sqlx.DB, coreAPIBase string) error {
 
 	// Check if already member
 	var exists bool
-	if err := db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_members WHERE community_id=$1 AND user_id=$2)", id, userIDFromContext(c)); err == nil && exists {
+    if err := db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_members WHERE community_id=$1 AND user_id=$2)", id, userIDFromContext(c)); err == nil && exists {
 		return c.JSON(fiber.Map{"success": true, "message": "already a member"})
 	}
 
@@ -300,27 +301,14 @@ func joinCommunity(c *fiber.Ctx, db *sqlx.DB, coreAPIBase string) error {
 	if isBannedFromCommunity(db, id, userIDFromContext(c)) {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this community"})
 	}
-	if _, err := db.Exec("INSERT INTO community_members(community_id, user_id, role) VALUES ($1,$2,'member') ON CONFLICT DO NOTHING", id, userIDFromContext(c)); err != nil {
+    if _, err := db.Exec("INSERT INTO community_members(community_id, user_id, role) VALUES ($1,$2,'member') ON CONFLICT DO NOTHING", id, userIDFromContext(c)); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "join failed"})
 	}
 	return c.JSON(fiber.Map{"success": true, "message": "joined"})
 }
 
-func userIDFromContext(c *fiber.Ctx) int64 {
-	// Try to parse from locals set by auth middleware; fall back to 0
-	v := c.Locals("userID")
-	if v == nil {
-		return 0
-	}
-	if s, ok := v.(string); ok {
-		if id, err := strconv.ParseInt(s, 10, 64); err == nil {
-			return id
-		}
-	}
-	if n, ok := v.(int64); ok {
-		return n
-	}
-	return 0
+func userIDFromContext(c *fiber.Ctx) string {
+    return srvAuth.UserID(c)
 }
 
 func fetchCommunityTags(db *sqlx.DB, communityID int64) ([]string, error) {
@@ -355,8 +343,8 @@ func getCommunityBySlug(c *fiber.Ctx, db *sqlx.DB) error {
 	tags, _ := fetchCommunityTags(db, cm.ID)
 	cm.Hashtags = tags
 	var role string
-	_ = db.Get(&role, "SELECT role FROM community_members WHERE community_id=$1 AND user_id=$2", cm.ID, userIDFromContext(c))
-	banned := isBannedFromCommunity(db, cm.ID, userIDFromContext(c))
+    _ = db.Get(&role, "SELECT role FROM community_members WHERE community_id=$1 AND user_id=$2", cm.ID, userIDFromContext(c))
+    banned := isBannedFromCommunity(db, cm.ID, userIDFromContext(c))
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": fiber.Map{
 		"id": cm.ID, "name": cm.Name, "slug": cm.Slug, "description": cm.Description, "visibility": cm.Visibility, "access": cm.Access, "hashtags": cm.Hashtags,
 		"current_user_role": role, "current_user_banned": banned,
@@ -400,26 +388,26 @@ func createGenericPost(c *fiber.Ctx, db *sqlx.DB) error {
 
 	// Visibility enforcement for private targets
 	if body.CommunityID != nil {
-		if isBannedFromCommunity(db, *body.CommunityID, userIDFromContext(c)) {
+        if isBannedFromCommunity(db, *body.CommunityID, userIDFromContext(c)) {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this community"})
 		}
 		// New: always require membership for posting into a community (public or private)
-		if !isMember(db, *body.CommunityID, userIDFromContext(c)) {
+        if !isMember(db, *body.CommunityID, userIDFromContext(c)) {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "membership required"})
 		}
 		// Keep private visibility check for defense in depth
 		if private, err := isCommunityPrivate(db, *body.CommunityID); err == nil && private {
-			if !isMember(db, *body.CommunityID, userIDFromContext(c)) {
+            if !isMember(db, *body.CommunityID, userIDFromContext(c)) {
 				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "membership required"})
 			}
 		}
 	}
 	if body.GroupID != nil {
-		if isBannedFromGroup(db, *body.GroupID, userIDFromContext(c)) {
+        if isBannedFromGroup(db, *body.GroupID, userIDFromContext(c)) {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this group"})
 		}
 		if private, err := isGroupPrivate(db, *body.GroupID); err == nil && private {
-			if !isGroupMember(db, *body.GroupID, userIDFromContext(c)) {
+            if !isGroupMember(db, *body.GroupID, userIDFromContext(c)) {
 				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "membership required"})
 			}
 		}
@@ -512,12 +500,13 @@ func publicFeed(c *fiber.Ctx, db *sqlx.DB) error {
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-		var id, userID sql.NullInt64
-		var title, body, kind sql.NullString
-		var createdAt sql.NullString
-		var communityID, groupID sql.NullInt64
-		var communitySlug, groupSlug sql.NullString
-		_ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt, &communityID, &communitySlug, &groupID, &groupSlug)
+        var id sql.NullInt64
+        var userID sql.NullString
+        var title, body, kind sql.NullString
+        var createdAt sql.NullString
+        var communityID, groupID sql.NullInt64
+        var communitySlug, groupSlug sql.NullString
+        _ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt, &communityID, &communitySlug, &groupID, &groupSlug)
 		// counts
 		var likeCount, reactCount, viewCount, commentCount int64
 		_ = db.Get(&likeCount, "SELECT COUNT(*) FROM post_likes WHERE post_id=$1", id.Int64)
@@ -547,14 +536,14 @@ func publicFeed(c *fiber.Ctx, db *sqlx.DB) error {
 		if mrows != nil {
 			mrows.Close()
 		}
-		items = append(items, fiber.Map{
-			"id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.Int64, "kind": kind.String, "created_at": createdAt.String,
-			"community_id": communityID.Int64, "community_slug": communitySlug.String,
-			"group_id": groupID.Int64, "group_slug": groupSlug.String,
-			"like_count": likeCount, "reaction_count": reactCount, "view_count": viewCount, "comment_count": commentCount,
-			"reactions": rb,
-			"media":     media,
-		})
+        items = append(items, fiber.Map{
+            "id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.String, "kind": kind.String, "created_at": createdAt.String,
+            "community_id": communityID.Int64, "community_slug": communitySlug.String,
+            "group_id": groupID.Int64, "group_slug": groupSlug.String,
+            "like_count": likeCount, "reaction_count": reactCount, "view_count": viewCount, "comment_count": commentCount,
+            "reactions": rb,
+            "media":     media,
+        })
 	}
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": items})
 }
@@ -646,11 +635,12 @@ func listComments(c *fiber.Ctx, db *sqlx.DB) error {
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-		var cid, uid int64
-		var body, created string
-		var parent sql.NullInt64
-		_ = rows.Scan(&cid, &uid, &body, &parent, &created)
-		items = append(items, fiber.Map{"id": cid, "user_id": uid, "body": body, "parent_comment_id": parent.Int64, "created_at": created})
+        var cid int64
+        var uid string
+        var body, created string
+        var parent sql.NullInt64
+        _ = rows.Scan(&cid, &uid, &body, &parent, &created)
+        items = append(items, fiber.Map{"id": cid, "user_id": uid, "body": body, "parent_comment_id": parent.Int64, "created_at": created})
 	}
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": items})
 }
@@ -730,13 +720,14 @@ func exploreByTag(c *fiber.Ctx, db *sqlx.DB) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
 	}
 	defer rows.Close()
-	for rows.Next() {
-		var id, userID sql.NullInt64
-		var title, body, kind sql.NullString
-		var createdAt sql.NullString
-		_ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt)
-		posts = append(posts, fiber.Map{"id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.Int64, "kind": kind.String})
-	}
+    for rows.Next() {
+        var id sql.NullInt64
+        var userID sql.NullString
+        var title, body, kind sql.NullString
+        var createdAt sql.NullString
+        _ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt)
+        posts = append(posts, fiber.Map{"id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.String, "kind": kind.String})
+    }
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": posts})
 }
 
@@ -800,7 +791,7 @@ func createGroup(c *fiber.Ctx, db *sqlx.DB) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "create failed"})
 	}
 	// creator becomes owner
-	if uid := userIDFromContext(c); uid > 0 {
+    if uid := userIDFromContext(c); uid != "" {
 		if _, err := tx.Exec("INSERT INTO group_members(group_id, user_id, role) VALUES ($1,$2,'owner') ON CONFLICT DO NOTHING", req.ID, uid); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "owner assign failed"})
 		}
@@ -886,23 +877,23 @@ func isGroupPrivate(db *sqlx.DB, groupID int64) (bool, error) {
 	return strings.ToLower(vis) == "private", nil
 }
 
-func isGroupMember(db *sqlx.DB, groupID, userID int64) bool {
-	if userID == 0 {
-		return false
-	}
-	var exists bool
-	_ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2)", groupID, userID)
-	return exists
+func isGroupMember(db *sqlx.DB, groupID int64, userID string) bool {
+    if strings.TrimSpace(userID) == "" {
+        return false
+    }
+    var exists bool
+    _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2)", groupID, userID)
+    return exists
 }
 
 // Group bans and admin actions
-func isBannedFromGroup(db *sqlx.DB, groupID, userID int64) bool {
-	if userID == 0 {
-		return false
-	}
-	var exists bool
-	_ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_bans WHERE group_id=$1 AND user_id=$2)", groupID, userID)
-	return exists
+func isBannedFromGroup(db *sqlx.DB, groupID int64, userID string) bool {
+    if strings.TrimSpace(userID) == "" {
+        return false
+    }
+    var exists bool
+    _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_bans WHERE group_id=$1 AND user_id=$2)", groupID, userID)
+    return exists
 }
 
 func setGroupMemberRole(c *fiber.Ctx, db *sqlx.DB) error {
@@ -910,10 +901,8 @@ func setGroupMemberRole(c *fiber.Ctx, db *sqlx.DB) error {
 	if err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
-	targetUserID, err := strconv.ParseInt(c.Params("userId"), 10, 64)
-	if err != nil {
-		return c.SendStatus(fiber.StatusNotFound)
-	}
+    targetUserID := strings.TrimSpace(c.Params("userId"))
+    if _, err := uuid.Parse(targetUserID); err != nil { return c.SendStatus(fiber.StatusNotFound) }
 	var body struct {
 		Role string `json:"role"`
 	}
@@ -945,10 +934,8 @@ func groupBanAction(c *fiber.Ctx, db *sqlx.DB) error {
 	if err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
-	targetUserID, err := strconv.ParseInt(c.Params("userId"), 10, 64)
-	if err != nil {
-		return c.SendStatus(fiber.StatusNotFound)
-	}
+    targetUserID := strings.TrimSpace(c.Params("userId"))
+    if _, err := uuid.Parse(targetUserID); err != nil { return c.SendStatus(fiber.StatusNotFound) }
 	var body struct {
 		Action string `json:"action"`
 		Reason string `json:"reason"`
@@ -1180,13 +1167,13 @@ func isCommunityPrivate(db *sqlx.DB, communityID int64) (bool, error) {
 	return strings.ToLower(vis) == "private", nil
 }
 
-func isMember(db *sqlx.DB, communityID, userID int64) bool {
-	if userID == 0 {
-		return false
-	}
-	var exists bool
-	_ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_members WHERE community_id=$1 AND user_id=$2)", communityID, userID)
-	return exists
+func isMember(db *sqlx.DB, communityID int64, userID string) bool {
+    if strings.TrimSpace(userID) == "" {
+        return false
+    }
+    var exists bool
+    _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_members WHERE community_id=$1 AND user_id=$2)", communityID, userID)
+    return exists
 }
 
 func tagsSuggest(c *fiber.Ctx, db *sqlx.DB) error {
@@ -1223,13 +1210,13 @@ func tagsSuggest(c *fiber.Ctx, db *sqlx.DB) error {
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": items})
 }
 
-func isBannedFromCommunity(db *sqlx.DB, communityID, userID int64) bool {
-	if userID == 0 {
-		return false
-	}
-	var exists bool
-	_ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_bans WHERE community_id=$1 AND user_id=$2)", communityID, userID)
-	return exists
+func isBannedFromCommunity(db *sqlx.DB, communityID int64, userID string) bool {
+    if strings.TrimSpace(userID) == "" {
+        return false
+    }
+    var exists bool
+    _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_bans WHERE community_id=$1 AND user_id=$2)", communityID, userID)
+    return exists
 }
 
 func setCommunityMemberRole(c *fiber.Ctx, db *sqlx.DB) error {
@@ -1237,10 +1224,8 @@ func setCommunityMemberRole(c *fiber.Ctx, db *sqlx.DB) error {
 	if err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
-	targetUserID, err := strconv.ParseInt(c.Params("userId"), 10, 64)
-	if err != nil {
-		return c.SendStatus(fiber.StatusNotFound)
-	}
+    targetUserID := strings.TrimSpace(c.Params("userId"))
+    if _, err := uuid.Parse(targetUserID); err != nil { return c.SendStatus(fiber.StatusNotFound) }
 	var body struct {
 		Role string `json:"role"`
 	}
@@ -1274,10 +1259,8 @@ func communityBanAction(c *fiber.Ctx, db *sqlx.DB) error {
 	if err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
-	targetUserID, err := strconv.ParseInt(c.Params("userId"), 10, 64)
-	if err != nil {
-		return c.SendStatus(fiber.StatusNotFound)
-	}
+    targetUserID := strings.TrimSpace(c.Params("userId"))
+    if _, err := uuid.Parse(targetUserID); err != nil { return c.SendStatus(fiber.StatusNotFound) }
 	var body struct {
 		Action string `json:"action"`
 		Reason string `json:"reason"`

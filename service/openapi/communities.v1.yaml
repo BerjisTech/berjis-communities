@@ -146,7 +146,9 @@ paths:
         - in: path
           name: userId
           required: true
-          schema: { type: integer, format: int64 }
+          schema:
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -168,7 +170,9 @@ paths:
         - in: path
           name: userId
           required: true
-          schema: { type: integer, format: int64 }
+          schema:
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -265,6 +269,12 @@ paths:
         - in: path
           name: userId
           required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: userId
+          required: true
           schema: { type: integer, format: int64 }
       requestBody:
         required: true
@@ -284,6 +294,12 @@ paths:
           name: id
           required: true
           schema: { type: integer, format: int64 }
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
         - in: path
           name: userId
           required: true

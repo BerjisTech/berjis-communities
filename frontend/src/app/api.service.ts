@@ -154,19 +154,19 @@ export class ApiService {
     return this.http.post<{ success: boolean; data: { url: string; kind: 'image' | 'video' | 'other' } }>(`${this.svcBase()}/v1/uploads`, fd, { headers: h });
   }
 
-  setCommunityMemberRole(communityId: number, userId: number, role: 'admin' | 'member') {
+  setCommunityMemberRole(communityId: number, userId: string, role: 'admin' | 'member') {
     return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${communityId}/members/${userId}/role`, { role }, { headers: this.headers() });
   }
 
-  communityBan(communityId: number, userId: number, action: 'ban' | 'unban') {
+  communityBan(communityId: number, userId: string, action: 'ban' | 'unban') {
     return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/communities/${communityId}/bans/${userId}`, { action }, { headers: this.headers() });
   }
 
-  setGroupMemberRole(groupId: number, userId: number, role: 'admin' | 'mod' | 'member') {
+  setGroupMemberRole(groupId: number, userId: string, role: 'admin' | 'mod' | 'member') {
     return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/groups/${groupId}/members/${userId}/role`, { role }, { headers: this.headers() });
   }
 
-  groupBan(groupId: number, userId: number, action: 'ban' | 'unban') {
+  groupBan(groupId: number, userId: string, action: 'ban' | 'unban') {
     return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/groups/${groupId}/bans/${userId}`, { action }, { headers: this.headers() });
   }
 }
