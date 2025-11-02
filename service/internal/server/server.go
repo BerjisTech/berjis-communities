@@ -97,8 +97,15 @@ func New(opts Options) *fiber.App {
 
 	// Generic posts (standalone or tied to group/community/channel)
 	app.Post("/v1/posts", requireAuth, func(c *fiber.Ctx) error { return createGenericPost(c, opts.DB) })
-	// Stories feed (requires login)
-	app.Get("/v1/stories", requireAuth, func(c *fiber.Ctx) error { return storiesFeed(c, opts.DB) })
+    // Stories feed (requires login)
+    app.Get("/v1/stories", requireAuth, func(c *fiber.Ctx) error { return storiesFeed(c, opts.DB) })
+
+    // Follows (requires login)
+    app.Post("/v1/users/:id/follow", requireAuth, func(c *fiber.Ctx) error { return followUser(c, opts.DB) })
+    app.Delete("/v1/users/:id/follow", requireAuth, func(c *fiber.Ctx) error { return unfollowUser(c, opts.DB) })
+    app.Get("/v1/users/:id/following", requireAuth, func(c *fiber.Ctx) error { return listFollowing(c, opts.DB) })
+    app.Get("/v1/users/:id/followers", requireAuth, func(c *fiber.Ctx) error { return listFollowers(c, opts.DB) })
+    app.Delete("/v1/users/:id/followers/:followerId", requireAuth, func(c *fiber.Ctx) error { return removeFollower(c, opts.DB) })
 	app.Post("/v1/posts/:id/like", requireAuth, func(c *fiber.Ctx) error { return likePost(c, opts.DB) })
 	app.Delete("/v1/posts/:id/like", requireAuth, func(c *fiber.Ctx) error { return unlikePost(c, opts.DB) })
 	app.Post("/v1/posts/:id/react", requireAuth, func(c *fiber.Ctx) error { return reactPost(c, opts.DB) })
@@ -765,6 +772,67 @@ func urlQueryEscape(s string) string {
 	return r
 }
 
+// Follow current->target
+func followUser(c *fiber.Ctx, db *sqlx.DB) error {
+    follower := strings.TrimSpace(userIDFromContext(c))
+    target := strings.TrimSpace(c.Params("id"))
+    if follower == "" { return c.SendStatus(fiber.StatusUnauthorized) }
+    if _, err := uuid.Parse(target); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    if follower == target { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "cannot follow yourself"}) }
+    if _, err := db.Exec("INSERT INTO user_follows (follower_id, followee_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", follower, target); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "follow failed"})
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "followed"})
+}
+
+// Unfollow current->target
+func unfollowUser(c *fiber.Ctx, db *sqlx.DB) error {
+    follower := strings.TrimSpace(userIDFromContext(c))
+    target := strings.TrimSpace(c.Params("id"))
+    if follower == "" { return c.SendStatus(fiber.StatusUnauthorized) }
+    if _, err := uuid.Parse(target); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    if _, err := db.Exec("DELETE FROM user_follows WHERE follower_id=$1 AND followee_id=$2", follower, target); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "unfollow failed"})
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "unfollowed"})
+}
+
+// Remove follower: current user removes followerId from their followers
+func removeFollower(c *fiber.Ctx, db *sqlx.DB) error {
+    user := strings.TrimSpace(userIDFromContext(c))
+    pathUser := strings.TrimSpace(c.Params("id"))
+    follower := strings.TrimSpace(c.Params("followerId"))
+    if user == "" { return c.SendStatus(fiber.StatusUnauthorized) }
+    if user != pathUser { return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "forbidden"}) }
+    if _, err := uuid.Parse(follower); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    if _, err := db.Exec("DELETE FROM user_follows WHERE follower_id=$1 AND followee_id=$2", follower, user); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "remove failed"})
+    }
+    return c.JSON(fiber.Map{"success": true, "message": "removed"})
+}
+
+func listFollowing(c *fiber.Ctx, db *sqlx.DB) error {
+    user := strings.TrimSpace(c.Params("id"))
+    if _, err := uuid.Parse(user); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    rows, err := db.Queryx("SELECT followee_id FROM user_follows WHERE follower_id=$1 ORDER BY created_at DESC LIMIT 1000", user)
+    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
+    defer rows.Close()
+    ids := []string{}
+    for rows.Next() { var id string; _ = rows.Scan(&id); ids = append(ids, id) }
+    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": ids})
+}
+
+func listFollowers(c *fiber.Ctx, db *sqlx.DB) error {
+    user := strings.TrimSpace(c.Params("id"))
+    if _, err := uuid.Parse(user); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+    rows, err := db.Queryx("SELECT follower_id FROM user_follows WHERE followee_id=$1 ORDER BY created_at DESC LIMIT 1000", user)
+    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
+    defer rows.Close()
+    ids := []string{}
+    for rows.Next() { var id string; _ = rows.Scan(&id); ids = append(ids, id) }
+    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": ids})
+}
+
 // Stories feed for the current user: first own stories, then others' recent stories.
 func storiesFeed(c *fiber.Ctx, db *sqlx.DB) error {
     uid := userIDFromContext(c)
@@ -799,12 +867,13 @@ func storiesFeed(c *fiber.Ctx, db *sqlx.DB) error {
     }
     rows.Close()
 
-    // Others' most recent story per user (last 50 users)
+    // Others' most recent story per followed user (last 50 users)
     others := []map[string]any{}
     orows, err := db.Queryx(`
         SELECT DISTINCT ON (p.user_id) p.user_id, p.id, p.created_at
         FROM posts p
-        WHERE p.kind='story' AND (p.expires_at IS NULL OR now() <= p.expires_at) AND p.user_id <> $1
+        JOIN user_follows f ON f.followee_id = p.user_id
+        WHERE p.kind='story' AND (p.expires_at IS NULL OR now() <= p.expires_at) AND f.follower_id = $1
         ORDER BY p.user_id, p.id DESC
         LIMIT 50
     `, uid)

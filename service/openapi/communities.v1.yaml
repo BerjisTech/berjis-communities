@@ -787,3 +787,75 @@ components:
             schema: { $ref: '#/components/schemas/PostCreate' }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+  /v1/stories:
+    get:
+      tags: [posts]
+      summary: Stories feed (own + followed)
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/users/{id}/follow:
+    post:
+      tags: [users]
+      summary: Follow a user
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Followed, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+    delete:
+      tags: [users]
+      summary: Unfollow a user
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Unfollowed, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/users/{id}/followers:
+    get:
+      tags: [users]
+      summary: List followers (UUIDs)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/users/{id}/followers/{followerId}:
+    delete:
+      tags: [users]
+      summary: Remove a follower
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: followerId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Removed, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+
+  /v1/users/{id}/following:
+    get:
+      tags: [users]
+      summary: List following (UUIDs)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }

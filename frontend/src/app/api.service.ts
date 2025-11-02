@@ -123,6 +123,23 @@ export class ApiService {
     return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts`, payload, { headers: this.headers() });
   }
 
+  // Follow graph
+  follow(userId: string) {
+    return this.http.post<{ success: boolean; message: string }>(`${this.svcBase()}/v1/users/${userId}/follow`, {}, { headers: this.headers() });
+  }
+  unfollow(userId: string) {
+    return this.http.delete<{ success: boolean; message: string }>(`${this.svcBase()}/v1/users/${userId}/follow`, { headers: this.headers() });
+  }
+  removeFollower(userId: string, followerId: string) {
+    return this.http.delete<{ success: boolean; message: string }>(`${this.svcBase()}/v1/users/${userId}/followers/${followerId}`, { headers: this.headers() });
+  }
+  followers(userId: string) {
+    return this.http.get<{ success: boolean; data: string[] }>(`${this.svcBase()}/v1/users/${userId}/followers`, { headers: this.headers() });
+  }
+  following(userId: string) {
+    return this.http.get<{ success: boolean; data: string[] }>(`${this.svcBase()}/v1/users/${userId}/following`, { headers: this.headers() });
+  }
+
   likePost(id: number) {
     return this.http.post<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`, {}, { headers: this.headers() });
   }
