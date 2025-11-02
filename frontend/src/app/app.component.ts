@@ -2,11 +2,12 @@ import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, OnInit } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { ApiService } from './api.service';
+import { StoryStripComponent } from './story-strip.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, StoryStripComponent],
   templateUrl: './app.component.html'
 })
 export class AppComponent implements OnInit, AfterViewInit {

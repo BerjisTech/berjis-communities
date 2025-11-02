@@ -113,6 +113,16 @@ export class ApiService {
     );
   }
 
+  // Stories
+  listStories() {
+    return this.http.get<{ success: boolean; data: { own: any[]; others: any[] } }>(`${this.svcBase()}/v1/stories`, { headers: this.headers() });
+  }
+
+  createStory(caption: string, media: Array<{ url: string; kind: string }>) {
+    const payload: any = { kind: 'story', visibility: 'public', body: caption || '', media };
+    return this.http.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/posts`, payload, { headers: this.headers() });
+  }
+
   likePost(id: number) {
     return this.http.post<{ success: boolean; data: { like_count: number } }>(`${this.svcBase()}/v1/posts/${id}/like`, {}, { headers: this.headers() });
   }

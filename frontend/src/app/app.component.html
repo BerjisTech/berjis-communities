@@ -1,20 +1,18 @@
 <div class="grid grid-cols-4 h-screen w-full overflow-hidden p-0 m-0">
   <div #leftSideBar class="col-span-1 h-screen overflow-y-auto overflow-x-hidden">
-    <div #userAvatar class="h-[200px] flex items-center justify-center">
-      <ng-container *ngIf="currentUser; else avatarPlaceholder">
-        <img [src]="userAvatar" alt="Profile avatar" class="w-[150px] h-[150px] rounded-full shadow object-cover bg-slate-200" />
-      </ng-container>
-      <ng-template #avatarPlaceholder>
-        <div class="w-[150px] h-[150px] rounded-full shadow bg-slate-600 animate-pulse"></div>
-      </ng-template>
+    <div #userAvatar class="h-[200px] flex items-center justify-center" *ngIf="currentUser">
+      <img [src]="userAvatar" alt="Profile avatar" class="w-[150px] h-[150px] rounded-full shadow object-cover bg-slate-200" />
     </div>
-    <div #userName class="flex flex-col items-center justify-center text-center">
-      <span class="font-black text-xl">{{ currentUser ? userDisplayName : 'Guest' }}</span>
-      <span class="font-light text-slate-600" *ngIf="currentUser && userHandle">{{ userHandle }}</span>
-      <span class="font-light text-slate-400" *ngIf="!currentUser">Sign in to personalise</span>
+    <div #userName class="flex flex-col items-center justify-center text-center" *ngIf="currentUser">
+      <span class="font-black text-xl">{{ userDisplayName }}</span>
+      <span class="font-light text-slate-600" *ngIf="userHandle">{{ userHandle }}</span>
     </div>
     <div #navLinksRef
       class="h-[calc(100vh-550px)] w-[300px] mx-auto overflow-y-auto overflow-x-hidden flex flex-col px-2">
+      <a *ngIf="!currentUser" href="http://berjis.tech/account" class="rounded-lg p-3 mb-2 flex items-center justify-center gap-2 w-full bg-blue-600 text-white">
+        <span class="material-symbols-outlined">login</span>
+        <span>Sign In</span>
+      </a>
       <a [routerLink]="link.url" *ngFor="let link of navLinks"
         class="rounded-lg p-3 flex items-center justify-start gap-2 w-full"
         routerLinkActive="!bg-slate-800 !text-slate-100"
@@ -39,9 +37,8 @@
     <router-outlet></router-outlet>
   </div>
   <div #rightSideBar class="col-span-1 h-screen overflow-y-auto overflow-x-hidden">
-    <div #stories>
-      <h3>Stories</h3>
-      <div>Coming soon (24h status with green avatar ring)</div>
+    <div #stories *ngIf="currentUser" class="px-2 py-2">
+      <app-story-strip [me]="currentUser"></app-story-strip>
     </div>
     <div #suggestions></div>
     <div #recommendations></div>

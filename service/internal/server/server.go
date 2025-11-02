@@ -97,6 +97,8 @@ func New(opts Options) *fiber.App {
 
 	// Generic posts (standalone or tied to group/community/channel)
 	app.Post("/v1/posts", requireAuth, func(c *fiber.Ctx) error { return createGenericPost(c, opts.DB) })
+	// Stories feed (requires login)
+	app.Get("/v1/stories", requireAuth, func(c *fiber.Ctx) error { return storiesFeed(c, opts.DB) })
 	app.Post("/v1/posts/:id/like", requireAuth, func(c *fiber.Ctx) error { return likePost(c, opts.DB) })
 	app.Delete("/v1/posts/:id/like", requireAuth, func(c *fiber.Ctx) error { return unlikePost(c, opts.DB) })
 	app.Post("/v1/posts/:id/react", requireAuth, func(c *fiber.Ctx) error { return reactPost(c, opts.DB) })
@@ -763,6 +765,72 @@ func urlQueryEscape(s string) string {
 	return r
 }
 
+// Stories feed for the current user: first own stories, then others' recent stories.
+func storiesFeed(c *fiber.Ctx, db *sqlx.DB) error {
+    uid := userIDFromContext(c)
+    if strings.TrimSpace(uid) == "" {
+        return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "login required"})
+    }
+    // Own stories (latest 10)
+    own := []map[string]any{}
+    rows, err := db.Queryx(`
+        SELECT p.id, p.created_at
+        FROM posts p
+        WHERE p.kind='story' AND p.user_id=$1 AND (p.expires_at IS NULL OR now() <= p.expires_at)
+        ORDER BY p.id DESC
+        LIMIT 10
+    `, uid)
+    if err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+    }
+    for rows.Next() {
+        var id int64
+        var created string
+        _ = rows.Scan(&id, &created)
+        media := []map[string]any{}
+        mrows, _ := db.Queryx("SELECT url, kind FROM posts_media WHERE post_id=$1 ORDER BY position ASC, id ASC LIMIT 6", id)
+        for mrows != nil && mrows.Next() {
+            var url, mkind string
+            _ = mrows.Scan(&url, &mkind)
+            media = append(media, fiber.Map{"url": url, "kind": mkind})
+        }
+        if mrows != nil { mrows.Close() }
+        own = append(own, fiber.Map{"post_id": id, "created_at": created, "user_id": uid, "media": media})
+    }
+    rows.Close()
+
+    // Others' most recent story per user (last 50 users)
+    others := []map[string]any{}
+    orows, err := db.Queryx(`
+        SELECT DISTINCT ON (p.user_id) p.user_id, p.id, p.created_at
+        FROM posts p
+        WHERE p.kind='story' AND (p.expires_at IS NULL OR now() <= p.expires_at) AND p.user_id <> $1
+        ORDER BY p.user_id, p.id DESC
+        LIMIT 50
+    `, uid)
+    if err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+    }
+    for orows.Next() {
+        var postID int64
+        var created string
+        var authorID string
+        _ = orows.Scan(&authorID, &postID, &created)
+        media := []map[string]any{}
+        mrows, _ := db.Queryx("SELECT url, kind FROM posts_media WHERE post_id=$1 ORDER BY position ASC, id ASC LIMIT 3", postID)
+        for mrows != nil && mrows.Next() {
+            var url, mkind string
+            _ = mrows.Scan(&url, &mkind)
+            media = append(media, fiber.Map{"url": url, "kind": mkind})
+        }
+        if mrows != nil { mrows.Close() }
+        others = append(others, fiber.Map{"post_id": postID, "created_at": created, "user_id": authorID, "media": media})
+    }
+    orows.Close()
+
+    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": fiber.Map{"own": own, "others": others}})
+}
+
 func listGroups(c *fiber.Ctx, db *sqlx.DB) error {
 	groups := []Group{}
 	if err := db.Select(&groups, "SELECT id, name, slug, description, visibility FROM groups ORDER BY id DESC LIMIT 200"); err != nil {
@@ -1116,17 +1184,17 @@ func listPosts(c *fiber.Ctx, db *sqlx.DB) error {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "private community"})
 		}
 	}
-	type Post struct {
-		ID        int64  `db:"id" json:"id"`
-		Title     string `db:"title" json:"title"`
-		Body      string `db:"body" json:"body"`
-		UserID    int64  `db:"user_id" json:"user_id"`
-		CreatedAt string `db:"created_at" json:"created_at"`
-	}
-	posts := []Post{}
-	if err := db.Select(&posts, "SELECT id, title, body, user_id, created_at FROM posts WHERE channel_id=$1 ORDER BY id DESC LIMIT 200", channelID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
-	}
+    type Post struct {
+        ID        int64  `db:"id" json:"id"`
+        Title     string `db:"title" json:"title"`
+        Body      string `db:"body" json:"body"`
+        UserID    string `db:"user_id" json:"user_id"`
+        CreatedAt string `db:"created_at" json:"created_at"`
+    }
+    posts := []Post{}
+    if err := db.Select(&posts, "SELECT id, title, body, user_id, created_at FROM posts WHERE channel_id=$1 AND (expires_at IS NULL OR now() <= expires_at) ORDER BY id DESC LIMIT 200", channelID); err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+    }
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": posts})
 }
 
