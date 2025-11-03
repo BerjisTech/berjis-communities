@@ -1,4 +1,4 @@
-<article class="rounded-lg p-3 my-2 card shadow text-slate-200 !bg-radial-[at_0%_100%] !from-blue-950 !to-slate-900 !to-75% " [style.marginLeft.px]="depth * 24">
+<article class="rounded-lg p-3 my-2 shadow shadow-brand border border-blue-900/20 bg-white/90 text-slate-900 dark:border-slate-800 dark:bg-gradient-to-br dark:from-slate-950 dark:to-blue-950 dark:text-slate-200" [style.marginLeft.px]="depth * 24">
   <div class="flex items-center justify-between gap-3 mb-2">
     <div class="flex items-center gap-3">
       <div class="relative group" (mouseenter)="showUserPopover = true" (mouseleave)="showUserPopover = false">
@@ -30,7 +30,7 @@
       </div>
     </div>
     <div class="relative" (mouseleave)="moreMenuOpen = false">
-      <button class="px-2 py-1 rounded hover:bg-slate-800" (click)="$event.stopPropagation(); moreMenuOpen = !moreMenuOpen">?</button>
+      <button class="px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" (click)="$event.stopPropagation(); moreMenuOpen = !moreMenuOpen">?</button>
       <div *ngIf="moreMenuOpen"
            class="absolute right-0 mt-1 w-40 card rounded-md shadow-lg z-30">
         <button class="block w-full text-left px-3 py-2 hover:bg-gray-50">Report</button>
@@ -59,12 +59,12 @@
     </ng-container>
   </div>
 
-  <div class="mt-2 flex items-center gap-1 text-sm text-slate-300">
-    <button class="p-1 rounded hover:bg-slate-800" (click)="toggleLike()">👍 {{ post.like_count || 0 }}</button>
-    <button class="p-1 rounded hover:bg-slate-800" (click)="toggleComments()">💬 {{ post.comment_count ?? comments.length }}</button>
-    <!-- <button class="p-1 rounded hover:bg-slate-800" (click)="recordView()">👁️ {{ post.view_count || 0 }}</button> -->
+  <div class="mt-2 flex items-center gap-1 text-sm text-slate-600 dark:text-slate-300">
+    <button class="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" (click)="toggleLike()">👍 {{ post.like_count || 0 }}</button>
+    <button class="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" (click)="toggleComments()">💬 {{ post.comment_count ?? comments.length }}</button>
+    <!-- <button class="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" (click)="recordView()">👁️ {{ post.view_count || 0 }}</button> -->
     <div class="relative" (mouseleave)="reactionMenuOpen = false">
-      <button class="p-1 rounded hover:bg-slate-800" (click)="toggleReactionMenu($event)">
+      <button class="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" (click)="toggleReactionMenu($event)">
         😃 {{ post.reaction_count || 0 }}
       </button>
       <div *ngIf="reactionMenuOpen" class="absolute z-30 mt-1 p-1 card rounded shadow">

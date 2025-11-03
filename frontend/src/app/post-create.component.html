@@ -1,11 +1,11 @@
 <form [formGroup]="form" (ngSubmit)="onSubmit()"
-  class="bg-linear-to-tr from-blue-900 to-slate-900 rounded-lg p-3 shadow text-shadow-gray-900 text-slate-100 mb-2">
+  class="rounded-lg p-3 shadow mb-2 bg-white/90 text-slate-900 dark:bg-slate-900/80 dark:text-slate-100">
   <input formControlName="title" placeholder="Title (optional for text-only)"
-    class="bg-slate-950 w-full shadow rounded p-2 houtline-none focus:outline-none hidden">
+    class="w-full shadow rounded p-2 outline-none bg-white/90 text-slate-900 dark:bg-slate-950 dark:text-slate-100 hidden">
   <div class="relative">
     <textarea #bodyArea rows="6" formControlName="body" (input)="onBodyInput($event)"
       placeholder="Write something... type # to add tags"
-      class="bg-slate-950 w-full shadow rounded p-2 h-[50px] outline-none focus:outline-none"></textarea>
+      class="w-full shadow rounded p-2 h-[50px] outline-none bg-white/90 text-slate-900 focus:outline-none dark:bg-slate-950 dark:text-slate-100"></textarea>
     <ng-container *ngIf="(suggest$ | async) as sugg">
       <div *ngIf="sugg.length > 0"
         class="absolute left-[8px] right-[8px] bottom-[-2px] transform translate-y-[100%] bg-white border-[1px] border-solid border-[#e5e7eb] rounded-[6px] box-shadow-[0_4px_12px_rgba(0,0,0,0.06)] z-[10]">
@@ -35,7 +35,7 @@
     </div>
     <span class="flex-grow"></span>
     <button type="submit" [disabled]="(state$ | async)?.submitting"
-      class="bg-black text-white rounded px-3 h-[30px]">Post</button>
+      class="rounded px-3 h-[30px] btn btn-primary dark:bg-[color:var(--color-gold)] dark:text-slate-100">Post</button>
   </div>
   <div *ngIf="uploads.length" class="grid gap-1 mt-2"
     [ngClass]="{'grid-cols-2': uploads.length>1, 'grid-cols-1': uploads.length===1}">
