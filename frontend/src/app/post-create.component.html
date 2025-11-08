@@ -1,5 +1,5 @@
 <form [formGroup]="form" (ngSubmit)="onSubmit()"
-  class="rounded-lg p-3 shadow mb-2 bg-white/90 text-slate-900 dark:bg-slate-900/80 dark:text-slate-100">
+  class="rounded-lg p-3 shadow mb-2 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
   <input formControlName="title" placeholder="Title (optional for text-only)"
     class="w-full shadow rounded p-2 outline-none bg-white/90 text-slate-900 dark:bg-slate-950 dark:text-slate-100 hidden">
   <div class="relative">
@@ -8,9 +8,9 @@
       class="w-full shadow rounded p-2 h-[50px] outline-none bg-white/90 text-slate-900 focus:outline-none dark:bg-slate-950 dark:text-slate-100"></textarea>
     <ng-container *ngIf="(suggest$ | async) as sugg">
       <div *ngIf="sugg.length > 0"
-        class="absolute left-[8px] right-[8px] bottom-[-2px] transform translate-y-[100%] bg-white border-[1px] border-solid border-[#e5e7eb] rounded-[6px] box-shadow-[0_4px_12px_rgba(0,0,0,0.06)] z-[10]">
+        class="absolute left-2 right-2 -bottom-0.5 transform translate-y-full bg-white border border-solid border-[#e5e7eb] rounded-md box-shadow-[0_4px_12px_rgba(0,0,0,0.06)] z-10">
         <div *ngFor="let s of sugg" (click)="insertTag(s.name)"
-          class="px-[6px] py-[8px] flex justify-between cursor-pointer">
+          class="px-1.5 py-2 flex justify-between cursor-pointer">
           <span>#{{s.name}}</span>
           <small class="text-[#6b7280]">{{s.count}}</small>
         </div>
@@ -24,7 +24,7 @@
       <div class="flex items-center gap-2"><span class="material-symbols-outlined">image_inset</span> Media
       </div>
     </label>
-    <div *ngIf="!communityId && !groupId" class="grid grid-cols-1 gap-[12px]">
+    <div *ngIf="!communityId && !groupId" class="grid grid-cols-1 gap-3">
       <label class="flex items-center gap-2">
         <span class="material-symbols-outlined">Visibility</span>
         <select formControlName="visibility" class="border-none outline-none focus:outline-none">
@@ -33,9 +33,9 @@
         </select>
       </label>
     </div>
-    <span class="flex-grow"></span>
+    <span class="grow"></span>
     <button type="submit" [disabled]="(state$ | async)?.submitting"
-      class="rounded px-3 h-[30px] btn btn-primary dark:bg-[color:var(--color-gold)] dark:text-slate-100">Post</button>
+      class="rounded px-3 h-[30px] btn btn-primary dark:bg-gold dark:text-slate-100">Post</button>
   </div>
   <div *ngIf="uploads.length" class="grid gap-1 mt-2"
     [ngClass]="{'grid-cols-2': uploads.length>1, 'grid-cols-1': uploads.length===1}">

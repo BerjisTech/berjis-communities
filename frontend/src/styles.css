@@ -30,8 +30,8 @@ a { @apply text-blue-400 hover:text-blue-500 underline-offset-4 decoration-blue-
 .dark .shadow-brand { box-shadow: 0 28px 72px var(--color-shadow-dark); }
 
 /* Buttons */
-.btn-primary { @apply inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-white font-semibold hover:bg-blue-700; }
-.dark .btn-primary { @apply bg-[color:var(--color-gold)] text-slate-100 hover:bg-amber-400; }
+.btn-primary { @apply inline-flex items-center rounded-xl bg-blue-950 px-4 py-2 text-white font-semibold hover:bg-blue-700; }
+.dark .btn-primary { @apply bg-[color:var(--color-gold)] text-slate-100 hover:bg-amber-700; }
 
 /* Cards */
 .card { @apply border border-blue-900/20 bg-white/90; box-shadow: 0 8px 40px var(--color-shadow-light); }
