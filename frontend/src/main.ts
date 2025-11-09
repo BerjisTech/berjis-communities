@@ -14,22 +14,32 @@ import { CommunityCreateComponent } from './app/community-create.component';
 import { GroupCreateComponent } from './app/group-create.component';
 import { UserPostsComponent } from './app/user-posts.component';
 import { UserPublicPostsComponent } from './app/user-public-posts.component';
+import { CORE_AUTH_API_BASE, createAuthGuard } from '@berjis/angular-auth';
+import { environment } from './environments/environment';
+
+const authGuard = createAuthGuard({
+  ensureOptions: { maxAgeMs: 1500 }
+});
 
 const routes: Routes = [
   { path: '', component: HomeComponent },
   { path: 'explore', component: ExploreComponent },
   { path: 'communities', component: CommunitiesComponent },
-  { path: 'communities/new', component: CommunityCreateComponent },
+  { path: 'communities/new', component: CommunityCreateComponent, canActivate: [authGuard] },
   { path: 'groups', component: GroupsComponent },
-  { path: 'groups/new', component: GroupCreateComponent },
+  { path: 'groups/new', component: GroupCreateComponent, canActivate: [authGuard] },
   { path: 'g/:slug', component: GroupPageComponent },
   { path: 'c/:slug', component: CommunityPageComponent },
   { path: 'u/:username', component: UserPageComponent },
   { path: 'u/:username/posts', component: UserPublicPostsComponent },
-  { path: 'me/posts', component: UserPostsComponent },
-  { path: 'create', component: PostCreateComponent },
+  { path: 'me/posts', component: UserPostsComponent, canActivate: [authGuard] },
+  { path: 'create', component: PostCreateComponent, canActivate: [authGuard] },
 ];
 
 bootstrapApplication(AppComponent, {
-  providers: [provideRouter(routes), provideHttpClient()]
+  providers: [
+    provideRouter(routes),
+    provideHttpClient(),
+    { provide: CORE_AUTH_API_BASE, useValue: environment.apiBase }
+  ]
 }).catch(err => console.error(err));

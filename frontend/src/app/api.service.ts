@@ -3,6 +3,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, firstValueFrom, from, throwError } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { environment } from '../environments/environment';
+import { CoreAuthService } from '@berjis/angular-auth';
 
 type MiniUser = Record<string, any>;
 
@@ -12,7 +13,7 @@ export class ApiService {
   private meCache: { data: any; ts: number } | null = null;
   private meInFlight: Promise<any> | null = null;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private auth: CoreAuthService) {}
 
   private svcBase(): string {
     const w: any = (typeof window !== 'undefined') ? (window as any) : {};
@@ -21,8 +22,6 @@ export class ApiService {
 
   private headers(): HttpHeaders {
     let h = new HttpHeaders({ 'Content-Type': 'application/json' });
-    const token = localStorage.getItem('accessToken');
-    if (token) { h = h.set('Authorization', `Bearer ${token}`); }
     const devUser = localStorage.getItem('devUserId');
     if (devUser) { h = h.set('X-User-UUID', devUser); }
     return h;
@@ -36,17 +35,6 @@ export class ApiService {
     return base;
   }
 
-  private refreshAccess(): Promise<void> {
-    return firstValueFrom(this.http.post<{ success?: boolean; data?: any }>(`${this.coreBase}/v1/auth/refresh`, {}, { withCredentials: true }))
-      .then(res => {
-        const token = (res as any)?.data?.access || (res as any)?.access;
-        if (typeof token === 'string' && token.length) {
-          localStorage.setItem('accessToken', token);
-        }
-      })
-      .catch(() => {});
-  }
-
   private withRetry<T>(factory: () => Observable<T>): Observable<T> {
     let retried = false;
     return factory().pipe(
@@ -54,7 +42,7 @@ export class ApiService {
         const status = err?.status ?? err?.statusCode;
         if (status === 401 && !retried) {
           retried = true;
-          return from(this.refreshAccess()).pipe(switchMap(() => factory()));
+          return from(this.auth.ensureAuth({ force: true })).pipe(switchMap(() => factory()));
         }
         return throwError(() => err);
       })
@@ -130,6 +118,7 @@ export class ApiService {
     if (!force && this.meInFlight) {
       return this.meInFlight;
     }
+    await this.auth.ensureAuth(force ? { force: true } : { maxAgeMs: 1500 });
     const request = firstValueFrom(this.http.get<{ success?: boolean; data?: any }>(`${this.coreBase}/v1/me`, { withCredentials: true }))
       .then(res => {
         const data = (res as any)?.data ?? res;
@@ -237,8 +226,6 @@ export class ApiService {
     const fd = new FormData();
     fd.append('file', file);
     let h = new HttpHeaders();
-    const token = localStorage.getItem('accessToken');
-    if (token) { h = h.set('Authorization', `Bearer ${token}`); }
     const devUser = localStorage.getItem('devUserId');
     if (devUser) { h = h.set('X-User-UUID', devUser); }
     return this.post<{ success: boolean; data: { url: string; kind: 'image' | 'video' | 'other' } }>(`${this.svcBase()}/v1/uploads`, fd, { headers: h });

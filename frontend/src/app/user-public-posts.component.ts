@@ -56,8 +56,6 @@ export class UserPublicPostsComponent implements OnInit {
     // lightweight GET via fetch to avoid adding more methods to ApiService for now
     const base = (window as any).__COMMUNITIES_API__ || 'https://communities-api.berjis.tech';
     const headers: any = {};
-    const token = localStorage.getItem('accessToken');
-    if (token) headers['Authorization'] = `Bearer ${token}`;
     const devUser = localStorage.getItem('devUserId');
     if (devUser) headers['X-User-UUID'] = devUser;
     return fetch(base + path, { headers, credentials: 'include' }).then(r => r.json());

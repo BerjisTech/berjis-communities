@@ -1,11 +1,10 @@
 FROM golang:1.22-alpine AS builder
 WORKDIR /app
-COPY go.mod ./
+COPY communities/service/go.mod ./go.mod
+COPY communities/service/go.sum ./go.sum
+COPY shared/coreauth /shared/coreauth
 RUN --mount=type=cache,target=/go/pkg/mod go mod download || true
-COPY cmd ./cmd
-COPY internal ./internal
-COPY migrations ./migrations
-COPY openapi ./openapi
+COPY communities/service/ ./
 # Ensure go.sum is populated with imports discovered from source
 RUN --mount=type=cache,target=/go/pkg/mod go mod tidy
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \

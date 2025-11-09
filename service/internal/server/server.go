@@ -1,23 +1,25 @@
 package server
 
 import (
-    "database/sql"
-    "encoding/json"
-    "io"
-    "net/http"
-    "os"
-    "path/filepath"
-    "strconv"
-    "strings"
-    "time"
+	"database/sql"
+	"encoding/json"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
-    "github.com/gofiber/fiber/v2"
-    "github.com/gofiber/fiber/v2/middleware/cors"
-    "github.com/google/uuid"
-    "github.com/jmoiron/sqlx"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 
-    srvAuth "github.com/berjistech/berjis-ecosystem/communities/service/internal/auth"
-    "github.com/berjistech/berjis-ecosystem/communities/service/internal/billing"
+	srvAuth "github.com/berjistech/berjis-ecosystem/communities/service/internal/auth"
+	"github.com/berjistech/berjis-ecosystem/communities/service/internal/billing"
+	coreauth "github.com/berjistech/berjis-ecosystem/shared/coreauth"
 )
 
 type Options struct {
@@ -73,8 +75,24 @@ func New(opts Options) *fiber.App {
 	app.Get("/v1/communities/:id", func(c *fiber.Ctx) error { return getCommunity(c, opts.DB) })
 	app.Get("/v1/communities/by-slug/:slug", func(c *fiber.Ctx) error { return getCommunityBySlug(c, opts.DB) })
 
+	httpClientAuth := &http.Client{Timeout: 8 * time.Second}
+	var authVerifier *coreauth.Verifier
+	if base := strings.TrimSpace(opts.CoreAPIBase); base != "" {
+		if v, err := coreauth.NewVerifier(coreauth.Config{
+			CoreAPIBase: base,
+			HTTPClient:  httpClientAuth,
+		}); err != nil {
+			log.Printf("warn: coreauth verifier init failed: %v", err)
+		} else {
+			authVerifier = v
+		}
+	}
 	// Protected routes: create/join/leave
-	requireAuth := srvAuth.Middleware(srvAuth.Options{CoreAPIBase: opts.CoreAPIBase})
+	requireAuth := srvAuth.Middleware(srvAuth.Options{
+		CoreAPIBase: opts.CoreAPIBase,
+		HTTPClient:  httpClientAuth,
+		Verifier:    authVerifier,
+	})
 	app.Post("/v1/communities", requireAuth, func(c *fiber.Ctx) error { return createCommunity(c, opts.DB) })
 	app.Patch("/v1/communities/:id", requireAuth, func(c *fiber.Ctx) error { return updateCommunity(c, opts.DB) })
 	app.Delete("/v1/communities/:id", requireAuth, func(c *fiber.Ctx) error { return deleteCommunity(c, opts.DB) })
@@ -98,16 +116,16 @@ func New(opts Options) *fiber.App {
 
 	// Generic posts (standalone or tied to group/community/channel)
 	app.Post("/v1/posts", requireAuth, func(c *fiber.Ctx) error { return createGenericPost(c, opts.DB) })
-    // Stories feed (requires login)
-    app.Get("/v1/stories", requireAuth, func(c *fiber.Ctx) error { return storiesFeed(c, opts.DB) })
-    app.Get("/v1/stories/has", requireAuth, func(c *fiber.Ctx) error { return storiesHas(c, opts.DB) })
+	// Stories feed (requires login)
+	app.Get("/v1/stories", requireAuth, func(c *fiber.Ctx) error { return storiesFeed(c, opts.DB) })
+	app.Get("/v1/stories/has", requireAuth, func(c *fiber.Ctx) error { return storiesHas(c, opts.DB) })
 
-    // Follows (requires login)
-    app.Post("/v1/users/:id/follow", requireAuth, func(c *fiber.Ctx) error { return followUser(c, opts.DB) })
-    app.Delete("/v1/users/:id/follow", requireAuth, func(c *fiber.Ctx) error { return unfollowUser(c, opts.DB) })
-    app.Get("/v1/users/:id/following", requireAuth, func(c *fiber.Ctx) error { return listFollowing(c, opts.DB) })
-    app.Get("/v1/users/:id/followers", requireAuth, func(c *fiber.Ctx) error { return listFollowers(c, opts.DB) })
-    app.Delete("/v1/users/:id/followers/:followerId", requireAuth, func(c *fiber.Ctx) error { return removeFollower(c, opts.DB) })
+	// Follows (requires login)
+	app.Post("/v1/users/:id/follow", requireAuth, func(c *fiber.Ctx) error { return followUser(c, opts.DB) })
+	app.Delete("/v1/users/:id/follow", requireAuth, func(c *fiber.Ctx) error { return unfollowUser(c, opts.DB) })
+	app.Get("/v1/users/:id/following", requireAuth, func(c *fiber.Ctx) error { return listFollowing(c, opts.DB) })
+	app.Get("/v1/users/:id/followers", requireAuth, func(c *fiber.Ctx) error { return listFollowers(c, opts.DB) })
+	app.Delete("/v1/users/:id/followers/:followerId", requireAuth, func(c *fiber.Ctx) error { return removeFollower(c, opts.DB) })
 	app.Post("/v1/posts/:id/like", requireAuth, func(c *fiber.Ctx) error { return likePost(c, opts.DB) })
 	app.Delete("/v1/posts/:id/like", requireAuth, func(c *fiber.Ctx) error { return unlikePost(c, opts.DB) })
 	app.Post("/v1/posts/:id/react", requireAuth, func(c *fiber.Ctx) error { return reactPost(c, opts.DB) })
@@ -133,9 +151,9 @@ func New(opts Options) *fiber.App {
 	// Resolve username to user UUID via Core API search
 	app.Get("/v1/users/by-username/:username", func(c *fiber.Ctx) error { return resolveUsername(c, opts.CoreAPIBase) })
 
-    // User posts
-    app.Get("/v1/users/:id/posts", func(c *fiber.Ctx) error { return listUserPosts(c, opts.DB) })
-    app.Get("/v1/users/:id/posts/count", func(c *fiber.Ctx) error { return countUserPosts(c, opts.DB) })
+	// User posts
+	app.Get("/v1/users/:id/posts", func(c *fiber.Ctx) error { return listUserPosts(c, opts.DB) })
+	app.Get("/v1/users/:id/posts/count", func(c *fiber.Ctx) error { return countUserPosts(c, opts.DB) })
 
 	// Groups
 	app.Get("/v1/groups", func(c *fiber.Ctx) error { return listGroups(c, opts.DB) })
@@ -242,8 +260,8 @@ func createCommunity(c *fiber.Ctx, db *sqlx.DB) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "insert failed"})
 	}
 	// make creator owner if identified
-    if uid := userIDFromContext(c); uid != "" {
-    if _, err := tx.Exec("INSERT INTO community_members(community_id, user_id, role) VALUES ($1,$2,'owner') ON CONFLICT DO NOTHING", req.ID, uid); err != nil {
+	if uid := userIDFromContext(c); uid != "" {
+		if _, err := tx.Exec("INSERT INTO community_members(community_id, user_id, role) VALUES ($1,$2,'owner') ON CONFLICT DO NOTHING", req.ID, uid); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "owner assign failed"})
 		}
 	}
@@ -280,7 +298,7 @@ func joinCommunity(c *fiber.Ctx, db *sqlx.DB, coreAPIBase string) error {
 
 	// Check if already member
 	var exists bool
-    if err := db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_members WHERE community_id=$1 AND user_id=$2)", id, userIDFromContext(c)); err == nil && exists {
+	if err := db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_members WHERE community_id=$1 AND user_id=$2)", id, userIDFromContext(c)); err == nil && exists {
 		return c.JSON(fiber.Map{"success": true, "message": "already a member"})
 	}
 
@@ -318,14 +336,14 @@ func joinCommunity(c *fiber.Ctx, db *sqlx.DB, coreAPIBase string) error {
 	if isBannedFromCommunity(db, id, userIDFromContext(c)) {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this community"})
 	}
-    if _, err := db.Exec("INSERT INTO community_members(community_id, user_id, role) VALUES ($1,$2,'member') ON CONFLICT DO NOTHING", id, userIDFromContext(c)); err != nil {
+	if _, err := db.Exec("INSERT INTO community_members(community_id, user_id, role) VALUES ($1,$2,'member') ON CONFLICT DO NOTHING", id, userIDFromContext(c)); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "join failed"})
 	}
 	return c.JSON(fiber.Map{"success": true, "message": "joined"})
 }
 
 func userIDFromContext(c *fiber.Ctx) string {
-    return srvAuth.UserID(c)
+	return srvAuth.UserID(c)
 }
 
 func fetchCommunityTags(db *sqlx.DB, communityID int64) ([]string, error) {
@@ -360,8 +378,8 @@ func getCommunityBySlug(c *fiber.Ctx, db *sqlx.DB) error {
 	tags, _ := fetchCommunityTags(db, cm.ID)
 	cm.Hashtags = tags
 	var role string
-    _ = db.Get(&role, "SELECT role FROM community_members WHERE community_id=$1 AND user_id=$2", cm.ID, userIDFromContext(c))
-    banned := isBannedFromCommunity(db, cm.ID, userIDFromContext(c))
+	_ = db.Get(&role, "SELECT role FROM community_members WHERE community_id=$1 AND user_id=$2", cm.ID, userIDFromContext(c))
+	banned := isBannedFromCommunity(db, cm.ID, userIDFromContext(c))
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": fiber.Map{
 		"id": cm.ID, "name": cm.Name, "slug": cm.Slug, "description": cm.Description, "visibility": cm.Visibility, "access": cm.Access, "hashtags": cm.Hashtags,
 		"current_user_role": role, "current_user_banned": banned,
@@ -385,12 +403,12 @@ func createGenericPost(c *fiber.Ctx, db *sqlx.DB) error {
 			Kind string `json:"kind"`
 		} `json:"media"`
 	}
-    if err := c.BodyParser(&body); err != nil {
-        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid json"})
-    }
-    if strings.TrimSpace(userIDFromContext(c)) == "" {
-        return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "login required"})
-    }
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid json"})
+	}
+	if strings.TrimSpace(userIDFromContext(c)) == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "login required"})
+	}
 	if strings.TrimSpace(body.Title) == "" && strings.TrimSpace(body.Body) == "" && strings.ToLower(body.Kind) != "repost" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "title or body required"})
 	}
@@ -408,26 +426,26 @@ func createGenericPost(c *fiber.Ctx, db *sqlx.DB) error {
 
 	// Visibility enforcement for private targets
 	if body.CommunityID != nil {
-        if isBannedFromCommunity(db, *body.CommunityID, userIDFromContext(c)) {
+		if isBannedFromCommunity(db, *body.CommunityID, userIDFromContext(c)) {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this community"})
 		}
 		// New: always require membership for posting into a community (public or private)
-        if !isMember(db, *body.CommunityID, userIDFromContext(c)) {
+		if !isMember(db, *body.CommunityID, userIDFromContext(c)) {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "membership required"})
 		}
 		// Keep private visibility check for defense in depth
 		if private, err := isCommunityPrivate(db, *body.CommunityID); err == nil && private {
-            if !isMember(db, *body.CommunityID, userIDFromContext(c)) {
+			if !isMember(db, *body.CommunityID, userIDFromContext(c)) {
 				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "membership required"})
 			}
 		}
 	}
 	if body.GroupID != nil {
-        if isBannedFromGroup(db, *body.GroupID, userIDFromContext(c)) {
+		if isBannedFromGroup(db, *body.GroupID, userIDFromContext(c)) {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "banned from this group"})
 		}
 		if private, err := isGroupPrivate(db, *body.GroupID); err == nil && private {
-            if !isGroupMember(db, *body.GroupID, userIDFromContext(c)) {
+			if !isGroupMember(db, *body.GroupID, userIDFromContext(c)) {
 				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "membership required"})
 			}
 		}
@@ -520,13 +538,13 @@ func publicFeed(c *fiber.Ctx, db *sqlx.DB) error {
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-        var id sql.NullInt64
-        var userID sql.NullString
-        var title, body, kind sql.NullString
-        var createdAt sql.NullString
-        var communityID, groupID sql.NullInt64
-        var communitySlug, groupSlug sql.NullString
-        _ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt, &communityID, &communitySlug, &groupID, &groupSlug)
+		var id sql.NullInt64
+		var userID sql.NullString
+		var title, body, kind sql.NullString
+		var createdAt sql.NullString
+		var communityID, groupID sql.NullInt64
+		var communitySlug, groupSlug sql.NullString
+		_ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt, &communityID, &communitySlug, &groupID, &groupSlug)
 		// counts
 		var likeCount, reactCount, viewCount, commentCount int64
 		_ = db.Get(&likeCount, "SELECT COUNT(*) FROM post_likes WHERE post_id=$1", id.Int64)
@@ -556,14 +574,14 @@ func publicFeed(c *fiber.Ctx, db *sqlx.DB) error {
 		if mrows != nil {
 			mrows.Close()
 		}
-        items = append(items, fiber.Map{
-            "id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.String, "kind": kind.String, "created_at": createdAt.String,
-            "community_id": communityID.Int64, "community_slug": communitySlug.String,
-            "group_id": groupID.Int64, "group_slug": groupSlug.String,
-            "like_count": likeCount, "reaction_count": reactCount, "view_count": viewCount, "comment_count": commentCount,
-            "reactions": rb,
-            "media":     media,
-        })
+		items = append(items, fiber.Map{
+			"id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.String, "kind": kind.String, "created_at": createdAt.String,
+			"community_id": communityID.Int64, "community_slug": communitySlug.String,
+			"group_id": groupID.Int64, "group_slug": groupSlug.String,
+			"like_count": likeCount, "reaction_count": reactCount, "view_count": viewCount, "comment_count": commentCount,
+			"reactions": rb,
+			"media":     media,
+		})
 	}
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": items})
 }
@@ -655,12 +673,12 @@ func listComments(c *fiber.Ctx, db *sqlx.DB) error {
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-        var cid int64
-        var uid string
-        var body, created string
-        var parent sql.NullInt64
-        _ = rows.Scan(&cid, &uid, &body, &parent, &created)
-        items = append(items, fiber.Map{"id": cid, "user_id": uid, "body": body, "parent_comment_id": parent.Int64, "created_at": created})
+		var cid int64
+		var uid string
+		var body, created string
+		var parent sql.NullInt64
+		_ = rows.Scan(&cid, &uid, &body, &parent, &created)
+		items = append(items, fiber.Map{"id": cid, "user_id": uid, "body": body, "parent_comment_id": parent.Int64, "created_at": created})
 	}
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": items})
 }
@@ -740,14 +758,14 @@ func exploreByTag(c *fiber.Ctx, db *sqlx.DB) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
 	}
 	defer rows.Close()
-    for rows.Next() {
-        var id sql.NullInt64
-        var userID sql.NullString
-        var title, body, kind sql.NullString
-        var createdAt sql.NullString
-        _ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt)
-        posts = append(posts, fiber.Map{"id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.String, "kind": kind.String})
-    }
+	for rows.Next() {
+		var id sql.NullInt64
+		var userID sql.NullString
+		var title, body, kind sql.NullString
+		var createdAt sql.NullString
+		_ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt)
+		posts = append(posts, fiber.Map{"id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.String, "kind": kind.String})
+	}
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": posts})
 }
 
@@ -766,20 +784,20 @@ func usersMiniProxy(c *fiber.Ctx, coreAPIBase string) error {
 	if cookie := c.Get("Cookie"); cookie != "" {
 		req.Header.Set("Cookie", cookie)
 	}
-    resp, err := http.DefaultClient.Do(req)
-    if err != nil {
-        // Return empty data instead of propagating error to avoid client 404 noise
-        return c.JSON(fiber.Map{"success": true, "message": "ok", "data": []any{}})
-    }
-    defer resp.Body.Close()
-    if resp.StatusCode != http.StatusOK {
-        // Graceful fallback: return empty list if core doesn't support mini endpoint
-        return c.JSON(fiber.Map{"success": true, "message": "ok", "data": []any{}})
-    }
-    c.Set("Content-Type", resp.Header.Get("Content-Type"))
-    c.Status(resp.StatusCode)
-    _, _ = io.Copy(c, resp.Body)
-    return nil
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		// Return empty data instead of propagating error to avoid client 404 noise
+		return c.JSON(fiber.Map{"success": true, "message": "ok", "data": []any{}})
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		// Graceful fallback: return empty list if core doesn't support mini endpoint
+		return c.JSON(fiber.Map{"success": true, "message": "ok", "data": []any{}})
+	}
+	c.Set("Content-Type", resp.Header.Get("Content-Type"))
+	c.Status(resp.StatusCode)
+	_, _ = io.Copy(c, resp.Body)
+	return nil
 }
 
 func urlQueryEscape(s string) string {
@@ -790,153 +808,213 @@ func urlQueryEscape(s string) string {
 
 // resolveUsername proxies to Core API /v1/users/search and returns best match
 func resolveUsername(c *fiber.Ctx, coreAPIBase string) error {
-    username := strings.TrimSpace(c.Params("username"))
-    if username == "" { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "username required"}) }
-    // Call core API search
-    req, err := http.NewRequest("GET", strings.TrimRight(coreAPIBase, "/")+"/v1/users/search?q="+urlQueryEscape(username), nil)
-    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "proxy error"}) }
-    if authz := c.Get("Authorization"); authz != "" { req.Header.Set("Authorization", authz) }
-    if cookie := c.Get("Cookie"); cookie != "" { req.Header.Set("Cookie", cookie) }
-    resp, err := http.DefaultClient.Do(req)
-    if err != nil { return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"success": false, "message": "core unavailable"}) }
-    defer resp.Body.Close()
-    // pass-through errors
-    if resp.StatusCode != http.StatusOK {
-        c.Set("Content-Type", resp.Header.Get("Content-Type"))
-        c.Status(resp.StatusCode)
-        _, _ = io.Copy(c, resp.Body)
-        return nil
-    }
-    var raw map[string]any
-    if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "invalid core response"})
-    }
-    arr, _ := raw["data"].([]any)
-    best := map[string]any{}
-    unameLower := strings.ToLower(username)
-    for _, v := range arr {
-        item, _ := v.(map[string]any)
-        if item == nil { continue }
-        u1, _ := item["username"].(string)
-        u2, _ := item["handle"].(string)
-        if strings.ToLower(u1) == unameLower || strings.ToLower(u2) == unameLower {
-            best = item
-            break
-        }
-        if len(best) == 0 {
-            best = item
-        }
-    }
-    if len(best) == 0 { return c.SendStatus(fiber.StatusNotFound) }
-    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": best})
+	username := strings.TrimSpace(c.Params("username"))
+	if username == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "username required"})
+	}
+	// Call core API search
+	req, err := http.NewRequest("GET", strings.TrimRight(coreAPIBase, "/")+"/v1/users/search?q="+urlQueryEscape(username), nil)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "proxy error"})
+	}
+	if authz := c.Get("Authorization"); authz != "" {
+		req.Header.Set("Authorization", authz)
+	}
+	if cookie := c.Get("Cookie"); cookie != "" {
+		req.Header.Set("Cookie", cookie)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"success": false, "message": "core unavailable"})
+	}
+	defer resp.Body.Close()
+	// pass-through errors
+	if resp.StatusCode != http.StatusOK {
+		c.Set("Content-Type", resp.Header.Get("Content-Type"))
+		c.Status(resp.StatusCode)
+		_, _ = io.Copy(c, resp.Body)
+		return nil
+	}
+	var raw map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "invalid core response"})
+	}
+	arr, _ := raw["data"].([]any)
+	best := map[string]any{}
+	unameLower := strings.ToLower(username)
+	for _, v := range arr {
+		item, _ := v.(map[string]any)
+		if item == nil {
+			continue
+		}
+		u1, _ := item["username"].(string)
+		u2, _ := item["handle"].(string)
+		if strings.ToLower(u1) == unameLower || strings.ToLower(u2) == unameLower {
+			best = item
+			break
+		}
+		if len(best) == 0 {
+			best = item
+		}
+	}
+	if len(best) == 0 {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": best})
 }
 
 // Follow current->target
 func followUser(c *fiber.Ctx, db *sqlx.DB) error {
-    if err := ensureFollowsTable(db); err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
-    follower := strings.TrimSpace(userIDFromContext(c))
-    target := strings.TrimSpace(c.Params("id"))
-    if follower == "" { return c.SendStatus(fiber.StatusUnauthorized) }
-    if _, err := uuid.Parse(target); err != nil { return c.SendStatus(fiber.StatusNotFound) }
-    if follower == target { return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "cannot follow yourself"}) }
-    if _, err := db.Exec("INSERT INTO user_follows (follower_id, followee_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", follower, target); err != nil {
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "follow failed"})
-    }
-    return c.JSON(fiber.Map{"success": true, "message": "followed"})
+	if err := ensureFollowsTable(db); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	follower := strings.TrimSpace(userIDFromContext(c))
+	target := strings.TrimSpace(c.Params("id"))
+	if follower == "" {
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+	if _, err := uuid.Parse(target); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	if follower == target {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "cannot follow yourself"})
+	}
+	if _, err := db.Exec("INSERT INTO user_follows (follower_id, followee_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", follower, target); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "follow failed"})
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "followed"})
 }
 
 // Unfollow current->target
 func unfollowUser(c *fiber.Ctx, db *sqlx.DB) error {
-    if err := ensureFollowsTable(db); err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
-    follower := strings.TrimSpace(userIDFromContext(c))
-    target := strings.TrimSpace(c.Params("id"))
-    if follower == "" { return c.SendStatus(fiber.StatusUnauthorized) }
-    if _, err := uuid.Parse(target); err != nil { return c.SendStatus(fiber.StatusNotFound) }
-    if _, err := db.Exec("DELETE FROM user_follows WHERE follower_id=$1 AND followee_id=$2", follower, target); err != nil {
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "unfollow failed"})
-    }
-    return c.JSON(fiber.Map{"success": true, "message": "unfollowed"})
+	if err := ensureFollowsTable(db); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	follower := strings.TrimSpace(userIDFromContext(c))
+	target := strings.TrimSpace(c.Params("id"))
+	if follower == "" {
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+	if _, err := uuid.Parse(target); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	if _, err := db.Exec("DELETE FROM user_follows WHERE follower_id=$1 AND followee_id=$2", follower, target); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "unfollow failed"})
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "unfollowed"})
 }
 
 // Remove follower: current user removes followerId from their followers
 func removeFollower(c *fiber.Ctx, db *sqlx.DB) error {
-    if err := ensureFollowsTable(db); err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
-    user := strings.TrimSpace(userIDFromContext(c))
-    pathUser := strings.TrimSpace(c.Params("id"))
-    follower := strings.TrimSpace(c.Params("followerId"))
-    if user == "" { return c.SendStatus(fiber.StatusUnauthorized) }
-    if user != pathUser { return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "forbidden"}) }
-    if _, err := uuid.Parse(follower); err != nil { return c.SendStatus(fiber.StatusNotFound) }
-    if _, err := db.Exec("DELETE FROM user_follows WHERE follower_id=$1 AND followee_id=$2", follower, user); err != nil {
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "remove failed"})
-    }
-    return c.JSON(fiber.Map{"success": true, "message": "removed"})
+	if err := ensureFollowsTable(db); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	user := strings.TrimSpace(userIDFromContext(c))
+	pathUser := strings.TrimSpace(c.Params("id"))
+	follower := strings.TrimSpace(c.Params("followerId"))
+	if user == "" {
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+	if user != pathUser {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "forbidden"})
+	}
+	if _, err := uuid.Parse(follower); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	if _, err := db.Exec("DELETE FROM user_follows WHERE follower_id=$1 AND followee_id=$2", follower, user); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "remove failed"})
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "removed"})
 }
 
 func listFollowing(c *fiber.Ctx, db *sqlx.DB) error {
-    if err := ensureFollowsTable(db); err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
-    user := strings.TrimSpace(c.Params("id"))
-    if _, err := uuid.Parse(user); err != nil { return c.SendStatus(fiber.StatusNotFound) }
-    rows, err := db.Queryx("SELECT followee_id FROM user_follows WHERE follower_id=$1 ORDER BY created_at DESC LIMIT 1000", user)
-    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
-    defer rows.Close()
-    ids := []string{}
-    for rows.Next() { var id string; _ = rows.Scan(&id); ids = append(ids, id) }
-    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": ids})
+	if err := ensureFollowsTable(db); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	user := strings.TrimSpace(c.Params("id"))
+	if _, err := uuid.Parse(user); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	rows, err := db.Queryx("SELECT followee_id FROM user_follows WHERE follower_id=$1 ORDER BY created_at DESC LIMIT 1000", user)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		_ = rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": ids})
 }
 
 func listFollowers(c *fiber.Ctx, db *sqlx.DB) error {
-    if err := ensureFollowsTable(db); err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
-    user := strings.TrimSpace(c.Params("id"))
-    if _, err := uuid.Parse(user); err != nil { return c.SendStatus(fiber.StatusNotFound) }
-    rows, err := db.Queryx("SELECT follower_id FROM user_follows WHERE followee_id=$1 ORDER BY created_at DESC LIMIT 1000", user)
-    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
-    defer rows.Close()
-    ids := []string{}
-    for rows.Next() { var id string; _ = rows.Scan(&id); ids = append(ids, id) }
-    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": ids})
+	if err := ensureFollowsTable(db); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	user := strings.TrimSpace(c.Params("id"))
+	if _, err := uuid.Parse(user); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	rows, err := db.Queryx("SELECT follower_id FROM user_follows WHERE followee_id=$1 ORDER BY created_at DESC LIMIT 1000", user)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		_ = rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": ids})
 }
 
 // Stories feed for the current user: first own stories, then others' recent stories.
 func storiesFeed(c *fiber.Ctx, db *sqlx.DB) error {
-    uid := userIDFromContext(c)
-    if strings.TrimSpace(uid) == "" {
-        return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "login required"})
-    }
-    // Own stories (latest 10)
-    own := []map[string]any{}
-    var ownCount int64
-    _ = db.Get(&ownCount, "SELECT COUNT(*) FROM posts WHERE kind='story' AND user_id=$1 AND (expires_at IS NULL OR now() <= expires_at)", uid)
-    rows, err := db.Queryx(`
+	uid := userIDFromContext(c)
+	if strings.TrimSpace(uid) == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "login required"})
+	}
+	// Own stories (latest 10)
+	own := []map[string]any{}
+	var ownCount int64
+	_ = db.Get(&ownCount, "SELECT COUNT(*) FROM posts WHERE kind='story' AND user_id=$1 AND (expires_at IS NULL OR now() <= expires_at)", uid)
+	rows, err := db.Queryx(`
         SELECT p.id, p.created_at
         FROM posts p
         WHERE p.kind='story' AND p.user_id=$1 AND (p.expires_at IS NULL OR now() <= p.expires_at)
         ORDER BY p.id DESC
         LIMIT 10
     `, uid)
-    if err != nil {
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
-    }
-    for rows.Next() {
-        var id int64
-        var created string
-        _ = rows.Scan(&id, &created)
-        media := []map[string]any{}
-        mrows, _ := db.Queryx("SELECT url, kind FROM posts_media WHERE post_id=$1 ORDER BY position ASC, id ASC LIMIT 6", id)
-        for mrows != nil && mrows.Next() {
-            var url, mkind string
-            _ = mrows.Scan(&url, &mkind)
-            media = append(media, fiber.Map{"url": url, "kind": mkind})
-        }
-        if mrows != nil { mrows.Close() }
-        own = append(own, fiber.Map{"post_id": id, "created_at": created, "user_id": uid, "media": media, "story_count": ownCount})
-    }
-    rows.Close()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	for rows.Next() {
+		var id int64
+		var created string
+		_ = rows.Scan(&id, &created)
+		media := []map[string]any{}
+		mrows, _ := db.Queryx("SELECT url, kind FROM posts_media WHERE post_id=$1 ORDER BY position ASC, id ASC LIMIT 6", id)
+		for mrows != nil && mrows.Next() {
+			var url, mkind string
+			_ = mrows.Scan(&url, &mkind)
+			media = append(media, fiber.Map{"url": url, "kind": mkind})
+		}
+		if mrows != nil {
+			mrows.Close()
+		}
+		own = append(own, fiber.Map{"post_id": id, "created_at": created, "user_id": uid, "media": media, "story_count": ownCount})
+	}
+	rows.Close()
 
-    // Others' most recent story per followed user (last 50 users)
-    others := []map[string]any{}
-    if err := ensureFollowsTable(db); err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
-    orows, err := db.Queryx(`
+	// Others' most recent story per followed user (last 50 users)
+	others := []map[string]any{}
+	if err := ensureFollowsTable(db); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	orows, err := db.Queryx(`
         SELECT x.user_id, x.latest_id, x.created_at, x.story_count FROM (
           SELECT p.user_id,
                  MAX(p.id) AS latest_id,
@@ -950,32 +1028,34 @@ func storiesFeed(c *fiber.Ctx, db *sqlx.DB) error {
           LIMIT 50
         ) x
     `, uid)
-    if err != nil {
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
-    }
-    for orows.Next() {
-        var postID int64
-        var created string
-        var authorID string
-        var storyCount int64
-        _ = orows.Scan(&authorID, &postID, &created, &storyCount)
-        media := []map[string]any{}
-        mrows, _ := db.Queryx("SELECT url, kind FROM posts_media WHERE post_id=$1 ORDER BY position ASC, id ASC LIMIT 3", postID)
-        for mrows != nil && mrows.Next() {
-            var url, mkind string
-            _ = mrows.Scan(&url, &mkind)
-            media = append(media, fiber.Map{"url": url, "kind": mkind})
-        }
-        if mrows != nil { mrows.Close() }
-        others = append(others, fiber.Map{"post_id": postID, "created_at": created, "user_id": authorID, "media": media, "story_count": storyCount})
-    }
-    orows.Close()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	for orows.Next() {
+		var postID int64
+		var created string
+		var authorID string
+		var storyCount int64
+		_ = orows.Scan(&authorID, &postID, &created, &storyCount)
+		media := []map[string]any{}
+		mrows, _ := db.Queryx("SELECT url, kind FROM posts_media WHERE post_id=$1 ORDER BY position ASC, id ASC LIMIT 3", postID)
+		for mrows != nil && mrows.Next() {
+			var url, mkind string
+			_ = mrows.Scan(&url, &mkind)
+			media = append(media, fiber.Map{"url": url, "kind": mkind})
+		}
+		if mrows != nil {
+			mrows.Close()
+		}
+		others = append(others, fiber.Map{"post_id": postID, "created_at": created, "user_id": authorID, "media": media, "story_count": storyCount})
+	}
+	orows.Close()
 
-    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": fiber.Map{"own": own, "others": others}})
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": fiber.Map{"own": own, "others": others}})
 }
 
 func ensureFollowsTable(db *sqlx.DB) error {
-    _, err := db.Exec(`CREATE TABLE IF NOT EXISTS user_follows (
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS user_follows (
         follower_id uuid NOT NULL,
         followee_id uuid NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -984,40 +1064,50 @@ func ensureFollowsTable(db *sqlx.DB) error {
     );
     CREATE INDEX IF NOT EXISTS idx_user_follows_followee ON user_follows(followee_id);
     CREATE INDEX IF NOT EXISTS idx_user_follows_follower ON user_follows(follower_id);`)
-    return err
+	return err
 }
 
 // storiesHas: returns counts of active stories for given user IDs
 func storiesHas(c *fiber.Ctx, db *sqlx.DB) error {
-    raw := strings.TrimSpace(c.Query("ids"))
-    if raw == "" { return c.JSON(fiber.Map{"success": true, "message": "ok", "data": []any{}}) }
-    parts := strings.Split(raw, ",")
-    ids := make([]string, 0, len(parts))
-    for _, p := range parts {
-        s := strings.TrimSpace(p)
-        if s == "" { continue }
-        if _, err := uuid.Parse(s); err == nil { ids = append(ids, s) }
-    }
-    if len(ids) == 0 { return c.JSON(fiber.Map{"success": true, "message": "ok", "data": []any{}}) }
-    // Build IN clause
-    placeholders := make([]string, 0, len(ids))
-    args := make([]any, 0, len(ids))
-    for i, id := range ids {
-        placeholders = append(placeholders, "$"+strconv.Itoa(i+1))
-        args = append(args, id)
-    }
-    q := "SELECT user_id, COUNT(*) FROM posts WHERE kind='story' AND (expires_at IS NULL OR now() <= expires_at) AND user_id IN (" + strings.Join(placeholders, ",") + ") GROUP BY user_id"
-    rows, err := db.Queryx(q, args...)
-    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
-    defer rows.Close()
-    out := []map[string]any{}
-    for rows.Next() {
-        var uid string
-        var cnt int64
-        _ = rows.Scan(&uid, &cnt)
-        out = append(out, fiber.Map{"user_id": uid, "count": cnt})
-    }
-    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": out})
+	raw := strings.TrimSpace(c.Query("ids"))
+	if raw == "" {
+		return c.JSON(fiber.Map{"success": true, "message": "ok", "data": []any{}})
+	}
+	parts := strings.Split(raw, ",")
+	ids := make([]string, 0, len(parts))
+	for _, p := range parts {
+		s := strings.TrimSpace(p)
+		if s == "" {
+			continue
+		}
+		if _, err := uuid.Parse(s); err == nil {
+			ids = append(ids, s)
+		}
+	}
+	if len(ids) == 0 {
+		return c.JSON(fiber.Map{"success": true, "message": "ok", "data": []any{}})
+	}
+	// Build IN clause
+	placeholders := make([]string, 0, len(ids))
+	args := make([]any, 0, len(ids))
+	for i, id := range ids {
+		placeholders = append(placeholders, "$"+strconv.Itoa(i+1))
+		args = append(args, id)
+	}
+	q := "SELECT user_id, COUNT(*) FROM posts WHERE kind='story' AND (expires_at IS NULL OR now() <= expires_at) AND user_id IN (" + strings.Join(placeholders, ",") + ") GROUP BY user_id"
+	rows, err := db.Queryx(q, args...)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var uid string
+		var cnt int64
+		_ = rows.Scan(&uid, &cnt)
+		out = append(out, fiber.Map{"user_id": uid, "count": cnt})
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": out})
 }
 
 func listGroups(c *fiber.Ctx, db *sqlx.DB) error {
@@ -1048,7 +1138,7 @@ func createGroup(c *fiber.Ctx, db *sqlx.DB) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "create failed"})
 	}
 	// creator becomes owner
-    if uid := userIDFromContext(c); uid != "" {
+	if uid := userIDFromContext(c); uid != "" {
 		if _, err := tx.Exec("INSERT INTO group_members(group_id, user_id, role) VALUES ($1,$2,'owner') ON CONFLICT DO NOTHING", req.ID, uid); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "owner assign failed"})
 		}
@@ -1135,65 +1225,79 @@ func isGroupPrivate(db *sqlx.DB, groupID int64) (bool, error) {
 }
 
 func isGroupMember(db *sqlx.DB, groupID int64, userID string) bool {
-    if strings.TrimSpace(userID) == "" {
-        return false
-    }
-    var exists bool
-    _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2)", groupID, userID)
-    return exists
+	if strings.TrimSpace(userID) == "" {
+		return false
+	}
+	var exists bool
+	_ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2)", groupID, userID)
+	return exists
 }
 
 // List recent public posts by user (excludes expired stories)
 func listUserPosts(c *fiber.Ctx, db *sqlx.DB) error {
-    uid := strings.TrimSpace(c.Params("id"))
-    if _, err := uuid.Parse(uid); err != nil { return c.SendStatus(fiber.StatusNotFound) }
-    limit := 50
-    if v := strings.TrimSpace(c.Query("limit")); v != "" {
-        if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 { limit = n }
-    }
-    rows, err := db.Queryx(`
+	uid := strings.TrimSpace(c.Params("id"))
+	if _, err := uuid.Parse(uid); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	limit := 50
+	if v := strings.TrimSpace(c.Query("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	rows, err := db.Queryx(`
         SELECT id, title, body, kind, created_at, community_id, group_id
         FROM posts
         WHERE user_id=$1 AND (expires_at IS NULL OR now() <= expires_at) AND visibility='public' AND kind IN ('post','repost','quote','reply')
         ORDER BY id DESC
         LIMIT $2
     `, uid, limit)
-    if err != nil { return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"}) }
-    defer rows.Close()
-    out := []map[string]any{}
-    for rows.Next() {
-        var id, communityID, groupID sql.NullInt64
-        var title, body, kind, createdAt sql.NullString
-        _ = rows.Scan(&id, &title, &body, &kind, &createdAt, &communityID, &groupID)
-        // media
-        media := []map[string]any{}
-        mrows, _ := db.Queryx("SELECT url, kind FROM posts_media WHERE post_id=$1 ORDER BY position ASC, id ASC LIMIT 6", id.Int64)
-        for mrows != nil && mrows.Next() { var url, mkind string; _ = mrows.Scan(&url, &mkind); media = append(media, fiber.Map{"url": url, "kind": mkind}) }
-        if mrows != nil { mrows.Close() }
-        out = append(out, fiber.Map{
-            "id": id.Int64, "title": title.String, "body": body.String, "user_id": uid, "kind": kind.String, "created_at": createdAt.String,
-            "community_id": communityID.Int64, "group_id": groupID.Int64, "media": media,
-        })
-    }
-    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": out})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var id, communityID, groupID sql.NullInt64
+		var title, body, kind, createdAt sql.NullString
+		_ = rows.Scan(&id, &title, &body, &kind, &createdAt, &communityID, &groupID)
+		// media
+		media := []map[string]any{}
+		mrows, _ := db.Queryx("SELECT url, kind FROM posts_media WHERE post_id=$1 ORDER BY position ASC, id ASC LIMIT 6", id.Int64)
+		for mrows != nil && mrows.Next() {
+			var url, mkind string
+			_ = mrows.Scan(&url, &mkind)
+			media = append(media, fiber.Map{"url": url, "kind": mkind})
+		}
+		if mrows != nil {
+			mrows.Close()
+		}
+		out = append(out, fiber.Map{
+			"id": id.Int64, "title": title.String, "body": body.String, "user_id": uid, "kind": kind.String, "created_at": createdAt.String,
+			"community_id": communityID.Int64, "group_id": groupID.Int64, "media": media,
+		})
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": out})
 }
 
 func countUserPosts(c *fiber.Ctx, db *sqlx.DB) error {
-    uid := strings.TrimSpace(c.Params("id"))
-    if _, err := uuid.Parse(uid); err != nil { return c.SendStatus(fiber.StatusNotFound) }
-    var n int64
-    _ = db.Get(&n, `SELECT COUNT(*) FROM posts WHERE user_id=$1 AND (expires_at IS NULL OR now() <= expires_at) AND kind IN ('post','repost','quote','reply')`, uid)
-    return c.JSON(fiber.Map{"success": true, "message": "ok", "data": map[string]any{"count": n}})
+	uid := strings.TrimSpace(c.Params("id"))
+	if _, err := uuid.Parse(uid); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	var n int64
+	_ = db.Get(&n, `SELECT COUNT(*) FROM posts WHERE user_id=$1 AND (expires_at IS NULL OR now() <= expires_at) AND kind IN ('post','repost','quote','reply')`, uid)
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": map[string]any{"count": n}})
 }
 
 // Group bans and admin actions
 func isBannedFromGroup(db *sqlx.DB, groupID int64, userID string) bool {
-    if strings.TrimSpace(userID) == "" {
-        return false
-    }
-    var exists bool
-    _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_bans WHERE group_id=$1 AND user_id=$2)", groupID, userID)
-    return exists
+	if strings.TrimSpace(userID) == "" {
+		return false
+	}
+	var exists bool
+	_ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM group_bans WHERE group_id=$1 AND user_id=$2)", groupID, userID)
+	return exists
 }
 
 func setGroupMemberRole(c *fiber.Ctx, db *sqlx.DB) error {
@@ -1201,8 +1305,10 @@ func setGroupMemberRole(c *fiber.Ctx, db *sqlx.DB) error {
 	if err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
-    targetUserID := strings.TrimSpace(c.Params("userId"))
-    if _, err := uuid.Parse(targetUserID); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+	targetUserID := strings.TrimSpace(c.Params("userId"))
+	if _, err := uuid.Parse(targetUserID); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
 	var body struct {
 		Role string `json:"role"`
 	}
@@ -1234,8 +1340,10 @@ func groupBanAction(c *fiber.Ctx, db *sqlx.DB) error {
 	if err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
-    targetUserID := strings.TrimSpace(c.Params("userId"))
-    if _, err := uuid.Parse(targetUserID); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+	targetUserID := strings.TrimSpace(c.Params("userId"))
+	if _, err := uuid.Parse(targetUserID); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
 	var body struct {
 		Action string `json:"action"`
 		Reason string `json:"reason"`
@@ -1416,17 +1524,17 @@ func listPosts(c *fiber.Ctx, db *sqlx.DB) error {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "message": "private community"})
 		}
 	}
-    type Post struct {
-        ID        int64  `db:"id" json:"id"`
-        Title     string `db:"title" json:"title"`
-        Body      string `db:"body" json:"body"`
-        UserID    string `db:"user_id" json:"user_id"`
-        CreatedAt string `db:"created_at" json:"created_at"`
-    }
-    posts := []Post{}
-    if err := db.Select(&posts, "SELECT id, title, body, user_id, created_at FROM posts WHERE channel_id=$1 AND (expires_at IS NULL OR now() <= expires_at) ORDER BY id DESC LIMIT 200", channelID); err != nil {
-        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
-    }
+	type Post struct {
+		ID        int64  `db:"id" json:"id"`
+		Title     string `db:"title" json:"title"`
+		Body      string `db:"body" json:"body"`
+		UserID    string `db:"user_id" json:"user_id"`
+		CreatedAt string `db:"created_at" json:"created_at"`
+	}
+	posts := []Post{}
+	if err := db.Select(&posts, "SELECT id, title, body, user_id, created_at FROM posts WHERE channel_id=$1 AND (expires_at IS NULL OR now() <= expires_at) ORDER BY id DESC LIMIT 200", channelID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
 	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": posts})
 }
 
@@ -1468,12 +1576,12 @@ func isCommunityPrivate(db *sqlx.DB, communityID int64) (bool, error) {
 }
 
 func isMember(db *sqlx.DB, communityID int64, userID string) bool {
-    if strings.TrimSpace(userID) == "" {
-        return false
-    }
-    var exists bool
-    _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_members WHERE community_id=$1 AND user_id=$2)", communityID, userID)
-    return exists
+	if strings.TrimSpace(userID) == "" {
+		return false
+	}
+	var exists bool
+	_ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_members WHERE community_id=$1 AND user_id=$2)", communityID, userID)
+	return exists
 }
 
 func tagsSuggest(c *fiber.Ctx, db *sqlx.DB) error {
@@ -1511,12 +1619,12 @@ func tagsSuggest(c *fiber.Ctx, db *sqlx.DB) error {
 }
 
 func isBannedFromCommunity(db *sqlx.DB, communityID int64, userID string) bool {
-    if strings.TrimSpace(userID) == "" {
-        return false
-    }
-    var exists bool
-    _ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_bans WHERE community_id=$1 AND user_id=$2)", communityID, userID)
-    return exists
+	if strings.TrimSpace(userID) == "" {
+		return false
+	}
+	var exists bool
+	_ = db.Get(&exists, "SELECT EXISTS (SELECT 1 FROM community_bans WHERE community_id=$1 AND user_id=$2)", communityID, userID)
+	return exists
 }
 
 func setCommunityMemberRole(c *fiber.Ctx, db *sqlx.DB) error {
@@ -1524,8 +1632,10 @@ func setCommunityMemberRole(c *fiber.Ctx, db *sqlx.DB) error {
 	if err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
-    targetUserID := strings.TrimSpace(c.Params("userId"))
-    if _, err := uuid.Parse(targetUserID); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+	targetUserID := strings.TrimSpace(c.Params("userId"))
+	if _, err := uuid.Parse(targetUserID); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
 	var body struct {
 		Role string `json:"role"`
 	}
@@ -1559,8 +1669,10 @@ func communityBanAction(c *fiber.Ctx, db *sqlx.DB) error {
 	if err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
-    targetUserID := strings.TrimSpace(c.Params("userId"))
-    if _, err := uuid.Parse(targetUserID); err != nil { return c.SendStatus(fiber.StatusNotFound) }
+	targetUserID := strings.TrimSpace(c.Params("userId"))
+	if _, err := uuid.Parse(targetUserID); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
 	var body struct {
 		Action string `json:"action"`
 		Reason string `json:"reason"`
@@ -1587,5 +1699,5 @@ func communityBanAction(c *fiber.Ctx, db *sqlx.DB) error {
 	if _, err := db.Exec("DELETE FROM community_bans WHERE community_id=$1 AND user_id=$2", id, targetUserID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "unban failed"})
 	}
-    return c.JSON(fiber.Map{"success": true, "message": "unbanned"})
+	return c.JSON(fiber.Map{"success": true, "message": "unbanned"})
 }
