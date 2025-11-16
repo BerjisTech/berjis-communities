@@ -157,14 +157,19 @@ export class ApiService {
   }
 
   usersMini(ids: Array<string | number>) {
-    const isUUID = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-    const uniq = Array.from(new Set(
-      ids
-        .map(id => (id ?? '').toString().trim())
-        .filter(id => id.length > 0 && isUUID(id))
-    ));
-    const query = uniq.map(id => encodeURIComponent(id)).join(',');
-    return this.get<{ success: boolean; data: MiniUser[] }>(`${this.svcBase()}/v1/users/mini?ids=${encodeURIComponent(query)}`);
+    const isUUID = (s: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+    const uniq = Array.from(
+      new Set(
+        ids
+          .map((id) => (id ?? '').toString().trim())
+          .filter((id) => id.length > 0 && isUUID(id))
+      )
+    );
+    const query = uniq.join(',');
+    return this.get<{ success: boolean; data: MiniUser[] }>(
+      `${this.svcBase()}/v1/users/mini?ids=${encodeURIComponent(query)}`
+    );
   }
 
   // Stories
