@@ -25,6 +25,13 @@ export class AppComponent implements OnInit, AfterViewInit {
   public showFollowers = false;
   public showFollowing = false;
   private miniForMe: any | null = null;
+
+  // Right sidebar data
+  public suggestedTags: { tag: string; count: number }[] = [];
+  public suggestedPosts: any[] = [];
+  public recommendedUserIds: string[] = [];
+  public loadingSuggestions = false;
+
   public navLinks: { name: string, url: string, icon?: string }[] = [
     { name: "Feed", url: "/", icon: "view_day" },
     { name: "Explore", url: "/explore", icon: "explore" },
@@ -38,6 +45,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   ngOnInit() {
     this.loadCurrentUser();
+    this.loadSuggestionsAndRecommendations();
   }
 
   ngAfterViewInit() {
@@ -91,7 +99,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       const me = await this.api.currentUser();
       this.currentUser = me;
       // Pull a unified mini profile for consistent avatar fields
-      const uid = (me?.id || me?.uuid || '').toString();
+      const uid = (me?.uuid || me?.id || '').toString();
       if (uid) {
         this.api.usersMini([uid]).subscribe({
           next: (res) => {
@@ -100,8 +108,8 @@ export class AppComponent implements OnInit, AfterViewInit {
           }
         });
       }
-      if (me && (me.id || me.uuid)) {
-        const uid = (me.id || me.uuid).toString();
+      if (me && (me.uuid || me.id)) {
+        const uid = (me.uuid || me.id).toString();
         // Load counts and lists
         this.api.followers(uid).subscribe(res => {
           this.followers = res.data || [];
@@ -122,6 +130,73 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.currentUser = null;
     } finally {
       this.userLoading = false;
+    }
+  }
+
+  private loadSuggestionsAndRecommendations() {
+    this.loadingSuggestions = true;
+    this.api.feedPublic(100, { }).subscribe({
+      next: (response) => {
+        const items = (response as any)?.data || [];
+        this.buildSuggestedTags(items);
+        this.buildSuggestedPosts(items);
+        this.buildRecommendedUsers(items);
+        this.loadingSuggestions = false;
+      },
+      error: () => {
+        this.loadingSuggestions = false;
+      }
+    });
+  }
+
+  private buildSuggestedTags(items: any[]) {
+    const tagCounts = new Map<string, number>();
+    for (const item of (items || [])) {
+      const body = String(item?.body || '');
+      const matches = body.match(/(^|\s)#([\w-]+)/g) || [];
+      for (const raw of matches) {
+        const cleaned = raw.replace(/^[^\#]*#/, '').trim().toLowerCase();
+        if (!cleaned) continue;
+        tagCounts.set(cleaned, (tagCounts.get(cleaned) || 0) + 1);
+      }
+    }
+    const sorted = Array.from(tagCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag, count]) => ({ tag, count }));
+    this.suggestedTags = sorted;
+  }
+
+  private buildSuggestedPosts(items: any[]) {
+    const unique: any[] = [];
+    const seen = new Set<number>();
+    for (const item of (items || [])) {
+      const id = Number(item?.id || 0);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      unique.push(item);
+      if (unique.length >= 5) break;
+    }
+    this.suggestedPosts = unique;
+  }
+
+  private buildRecommendedUsers(items: any[]) {
+    const meId = (this.currentUser?.uuid || this.currentUser?.id || '').toString();
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const item of (items || [])) {
+      const raw = (item?.user_id ?? '').toString().trim();
+      if (!raw) continue;
+      if (meId && raw === meId) continue;
+      if (this.followingSet.has(raw)) continue;
+      if (seen.has(raw)) continue;
+      seen.add(raw);
+      ids.push(raw);
+      if (ids.length >= 5) break;
+    }
+    this.recommendedUserIds = ids;
+    if (ids.length) {
+      this.fetchUsersMini(ids);
     }
   }
 
@@ -170,6 +245,17 @@ export class AppComponent implements OnInit, AfterViewInit {
     const u = this.userMini(id);
     return u?.name || u?.full_name || u?.username || u?.handle || (u?.email ? u.email.split('@')[0] : 'User');
   }
+
+  userHandleForId(id: string): string {
+    const u = this.userMini(id);
+    const handle = u?.username || u?.handle;
+    if (handle && String(handle).trim().length) return String(handle);
+    if (u?.email) {
+      return String(u.email).split('@')[0];
+    }
+    return '';
+  }
+
   userAvatarById(id: string) {
     const u = this.userMini(id);
     if (u?.avatarUrl) return u.avatarUrl;

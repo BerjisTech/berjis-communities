@@ -43,7 +43,7 @@
   <div class="font-semibold" *ngIf="post.title" [innerText]="post.title"></div>
   <div [innerHTML]="render(post.body)" class="overflow-hidden"></div>
 
-  <div *ngIf="hasMedia" class="mt-2 grid gap-1 auto-rows-[300px]"
+  <div *ngIf="hasMedia" class="mt-2 grid gap-1 auto-rows-[150px] lg:auto-rows-[300px]"
        [ngClass]="{'grid-cols-2': (post.media || []).length > 1, 'grid-cols-1': (post.media || []).length === 1}">
     <ng-container *ngFor="let media of post.media; let i = index">
       <ng-container *ngIf="i < 4">

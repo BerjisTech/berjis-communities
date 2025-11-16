@@ -14,6 +14,8 @@ import { CommunityCreateComponent } from './app/community-create.component';
 import { GroupCreateComponent } from './app/group-create.component';
 import { UserPostsComponent } from './app/user-posts.component';
 import { UserPublicPostsComponent } from './app/user-public-posts.component';
+import { MessagesComponent } from './app/messages.component';
+import { SettingsComponent } from './app/settings.component';
 import { CORE_AUTH_API_BASE, createAuthGuard } from '@berjis/angular-auth';
 import { environment } from './environments/environment';
 
@@ -34,6 +36,8 @@ const routes: Routes = [
   { path: 'u/:username/posts', component: UserPublicPostsComponent },
   { path: 'me/posts', component: UserPostsComponent, canActivate: [authGuard] },
   { path: 'create', component: PostCreateComponent, canActivate: [authGuard] },
+  { path: 'messages', component: MessagesComponent, canActivate: [authGuard] },
+  { path: 'settings', component: SettingsComponent, canActivate: [authGuard] },
 ];
 
 bootstrapApplication(AppComponent, {

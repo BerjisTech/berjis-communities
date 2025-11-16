@@ -1,0 +1,144 @@
+<main class="max-w-3xl mx-auto p-6 space-y-6">
+  <header class="flex items-center justify-between">
+    <div>
+      <h1 class="m-0 text-xl font-semibold text-slate-900 dark:text-slate-50">Communities Settings</h1>
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        Tune how you appear and what you see in Berjis Communities. Core account data (email, password, legal name) stays in your main Berjis profile.
+      </p>
+    </div>
+  </header>
+
+  <form [formGroup]="form" (ngSubmit)="save()" class="space-y-8">
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-100">Profile & identity</h2>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-600 dark:text-slate-300">Communities username</label>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-slate-500 dark:text-slate-400">&#64;</span>
+          <input
+            formControlName="communities_handle"
+            type="text"
+            placeholder="handle"
+            class="flex-1 px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70 text-sm text-slate-900 dark:text-slate-50"
+          />
+        </div>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+          Use a more casual or anonymous handle here. Your formal identity for Marketplace, Schools, etc. is unchanged.
+        </p>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-100">Content visibility</h2>
+      <div class="space-y-2">
+        <label class="block text-xs font-medium text-slate-600 dark:text-slate-300">Default audience for new posts</label>
+        <select
+          formControlName="default_visibility"
+          class="w-full px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70 text-sm text-slate-900 dark:text-slate-50"
+        >
+          <option *ngFor="let opt of visibilityOptions" [value]="opt.value">{{ opt.label }}</option>
+        </select>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+          You can still override visibility per post or community. “Paid” and “Subscribers only” rely on billing handled in the main Berjis API.
+        </p>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-100">Moderation & filters</h2>
+      <div class="space-y-2">
+        <label class="block text-xs font-medium text-slate-600 dark:text-slate-300">Filtered words</label>
+        <textarea
+          formControlName="filtered_words"
+          rows="2"
+          placeholder="word1, word2, word3"
+          class="w-full px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70 text-xs text-slate-900 dark:text-slate-50"
+        ></textarea>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+          Posts or messages containing these words can be down-ranked or hidden in future moderation passes.
+        </p>
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-xs font-medium text-slate-600 dark:text-slate-300">Filtered phrases</label>
+        <textarea
+          formControlName="filtered_phrases"
+          rows="2"
+          placeholder="phrase one | another phrase"
+          class="w-full px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70 text-xs text-slate-900 dark:text-slate-50"
+        ></textarea>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+          Use the `|` character to separate phrases.
+        </p>
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-xs font-medium text-slate-600 dark:text-slate-300">Blocked users</label>
+        <textarea
+          formControlName="blocked_user_ids"
+          rows="2"
+          placeholder="uuid-1, uuid-2"
+          class="w-full px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70 text-xs text-slate-900 dark:text-slate-50"
+        ></textarea>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+          Enter user UUIDs to block interactions across Communities. Core enforcement will evolve over time.
+        </p>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-100">Messages</h2>
+      <div class="space-y-2">
+        <label class="block text-xs font-medium text-slate-600 dark:text-slate-300">Who can message you</label>
+        <select
+          formControlName="dm_policy"
+          class="w-full px-3 py-2 rounded-md border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70 text-sm text-slate-900 dark:text-slate-50"
+        >
+          <option *ngFor="let opt of dmOptions" [value]="opt.value">{{ opt.label }}</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-100">Monetization</h2>
+      <div class="space-y-2">
+        <label class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+          <input type="checkbox" formControlName="monetization_enabled" class="rounded border-slate-300 dark:border-slate-600" />
+          Enable monetization for Communities
+        </label>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+          Billing, payouts, and compliance are handled via the main Berjis platform.
+        </p>
+      </div>
+      <div class="space-y-1 pl-4">
+        <label class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+          <input type="checkbox" formControlName="allow_subscriber_only_posts" class="rounded border-slate-300 dark:border-slate-600" />
+          Allow “Subscribers only” posts (future)
+        </label>
+        <label class="inline-flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+          <input type="checkbox" formControlName="allow_paid_only_posts" class="rounded border-slate-300 dark:border-slate-600" />
+          Allow “Paid only” one-off posts
+        </label>
+      </div>
+    </section>
+
+    <footer class="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+      <div class="text-[11px] space-y-0.5">
+        <div *ngIf="message" class="text-emerald-600 dark:text-emerald-400">
+          {{ message }}
+        </div>
+        <div *ngIf="error" class="text-red-600 dark:text-red-400">
+          {{ error }}
+        </div>
+      </div>
+      <button
+        type="submit"
+        [disabled]="saving"
+        class="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        <span class="material-symbols-outlined text-[18px] mr-1">save</span>
+        Save changes
+      </button>
+    </footer>
+  </form>
+</main>

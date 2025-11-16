@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -157,6 +158,15 @@ func New(opts Options) *fiber.App {
 	app.Post("/v1/uploads", requireAuth, uploadHandler(publicUploads))
 	app.Get("/v1/feed/public", func(c *fiber.Ctx) error { return publicFeed(c, opts.DB) })
 	app.Get("/v1/explore", func(c *fiber.Ctx) error { return exploreByTag(c, opts.DB) })
+
+	// Messages (DMs)
+	app.Get("/v1/messages/threads", requireAuth, func(c *fiber.Ctx) error { return listMessageThreads(c, opts.DB) })
+	app.Get("/v1/messages/with/:userId", requireAuth, func(c *fiber.Ctx) error { return listMessagesWith(c, opts.DB) })
+	app.Post("/v1/messages/with/:userId", requireAuth, func(c *fiber.Ctx) error { return sendMessage(c, opts.DB) })
+
+	// User preferences
+	app.Get("/v1/me/preferences", requireAuth, func(c *fiber.Ctx) error { return getMePreferences(c, opts.DB) })
+	app.Post("/v1/me/preferences", requireAuth, func(c *fiber.Ctx) error { return upsertMePreferences(c, opts.DB) })
 
 	// Users mini proxy (to Core API)
 	app.Get("/v1/users/mini", func(c *fiber.Ctx) error { return usersMiniProxy(c, opts.CoreAPIBase) })
@@ -772,6 +782,135 @@ func enrichExternalMedia(tx *sqlx.Tx, postID int64, bodyText string) error {
 	return nil
 }
 
+// User preferences (Communities-scoped)
+
+type userPreferences struct {
+	UserID                   string    `db:"user_id" json:"user_id"`
+	DefaultVisibility        string    `db:"default_visibility" json:"default_visibility"`
+	CommunitiesHandle        *string   `db:"communities_handle" json:"communities_handle,omitempty"`
+	FilteredWords            []string  `db:"filtered_words" json:"filtered_words"`
+	FilteredPhrases          []string  `db:"filtered_phrases" json:"filtered_phrases"`
+	BlockedUserIDs           []string  `db:"blocked_user_ids" json:"blocked_user_ids"`
+	DMPolicy                 string    `db:"dm_policy" json:"dm_policy"`
+	MonetizationEnabled      bool      `db:"monetization_enabled" json:"monetization_enabled"`
+	AllowPaidOnlyPosts       bool      `db:"allow_paid_only_posts" json:"allow_paid_only_posts"`
+	AllowSubscriberOnlyPosts bool      `db:"allow_subscriber_only_posts" json:"allow_subscriber_only_posts"`
+	CreatedAt                time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt                time.Time `db:"updated_at" json:"updated_at"`
+}
+
+func getMePreferences(c *fiber.Ctx, db *sqlx.DB) error {
+	me := strings.TrimSpace(userIDFromContext(c))
+	if me == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "login required"})
+	}
+	var prefs userPreferences
+	err := db.Get(&prefs, "SELECT user_id, default_visibility, communities_handle, filtered_words, filtered_phrases, blocked_user_ids, dm_policy, monetization_enabled, allow_paid_only_posts, allow_subscriber_only_posts, created_at, updated_at FROM user_preferences WHERE user_id=$1", me)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Return sensible defaults
+			now := time.Now()
+			prefs = userPreferences{
+				UserID:                   me,
+				DefaultVisibility:        "public",
+				FilteredWords:            []string{},
+				FilteredPhrases:          []string{},
+				BlockedUserIDs:           []string{},
+				DMPolicy:                 "anyone",
+				MonetizationEnabled:      false,
+				AllowPaidOnlyPosts:       false,
+				AllowSubscriberOnlyPosts: false,
+				CreatedAt:                now,
+				UpdatedAt:                now,
+			}
+		} else {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+		}
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": prefs})
+}
+
+func upsertMePreferences(c *fiber.Ctx, db *sqlx.DB) error {
+	me := strings.TrimSpace(userIDFromContext(c))
+	if me == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "login required"})
+	}
+	var req struct {
+		DefaultVisibility        string   `json:"default_visibility"`
+		CommunitiesHandle        *string  `json:"communities_handle"`
+		FilteredWords            []string `json:"filtered_words"`
+		FilteredPhrases          []string `json:"filtered_phrases"`
+		BlockedUserIDs           []string `json:"blocked_user_ids"`
+		DMPolicy                 string   `json:"dm_policy"`
+		MonetizationEnabled      bool     `json:"monetization_enabled"`
+		AllowPaidOnlyPosts       bool     `json:"allow_paid_only_posts"`
+		AllowSubscriberOnlyPosts bool     `json:"allow_subscriber_only_posts"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid json"})
+	}
+	vis := strings.ToLower(strings.TrimSpace(req.DefaultVisibility))
+	if vis == "" {
+		vis = "public"
+	}
+	switch vis {
+	case "public", "private", "followers", "subscribers", "paid":
+	default:
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid visibility"})
+	}
+	dm := strings.ToLower(strings.TrimSpace(req.DMPolicy))
+	if dm == "" {
+		dm = "anyone"
+	}
+	switch dm {
+	case "anyone", "followers", "none":
+	default:
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid dm_policy"})
+	}
+	var handle *string
+	if req.CommunitiesHandle != nil {
+		h := strings.TrimSpace(*req.CommunitiesHandle)
+		if h == "" {
+			handle = nil
+		} else {
+			handle = &h
+		}
+	}
+	// Normalize arrays
+	normSlice := func(in []string) []string {
+		out := []string{}
+		for _, v := range in {
+			s := strings.TrimSpace(v)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	fw := normSlice(req.FilteredWords)
+	fp := normSlice(req.FilteredPhrases)
+	bu := normSlice(req.BlockedUserIDs)
+	_, err := db.Exec(`
+      INSERT INTO user_preferences (user_id, default_visibility, communities_handle, filtered_words, filtered_phrases, blocked_user_ids, dm_policy, monetization_enabled, allow_paid_only_posts, allow_subscriber_only_posts, created_at, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now(), now())
+      ON CONFLICT (user_id) DO UPDATE
+      SET default_visibility=EXCLUDED.default_visibility,
+          communities_handle=EXCLUDED.communities_handle,
+          filtered_words=EXCLUDED.filtered_words,
+          filtered_phrases=EXCLUDED.filtered_phrases,
+          blocked_user_ids=EXCLUDED.blocked_user_ids,
+          dm_policy=EXCLUDED.dm_policy,
+          monetization_enabled=EXCLUDED.monetization_enabled,
+          allow_paid_only_posts=EXCLUDED.allow_paid_only_posts,
+          allow_subscriber_only_posts=EXCLUDED.allow_subscriber_only_posts,
+          updated_at=now()
+    `, me, vis, handle, fw, fp, bu, dm, req.MonetizationEnabled, req.AllowPaidOnlyPosts, req.AllowSubscriberOnlyPosts)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "save failed"})
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "saved"})
+}
+
 func extractTwitterStatusURL(text string) string {
 	re := regexp.MustCompile(`https?://(?:x\.com|twitter\.com)/[A-Za-z0-9_]+/status/\d+`)
 	m := re.FindString(text)
@@ -1004,6 +1143,210 @@ func urlQueryEscape(s string) string {
 	r := strings.ReplaceAll(s, " ", "+")
 	r = strings.ReplaceAll(r, "\n", "")
 	return r
+}
+
+// Messages (DMs)
+
+type messageThread struct {
+	UserID        string    `json:"user_id"`
+	LastMessage   string    `json:"last_message"`
+	LastDirection string    `json:"last_direction"` // "in" | "out"
+	LastAt        time.Time `json:"last_at"`
+	UnreadCount   int64     `json:"unread_count"`
+}
+
+func listMessageThreads(c *fiber.Ctx, db *sqlx.DB) error {
+	me := strings.TrimSpace(userIDFromContext(c))
+	if me == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "login required"})
+	}
+	// Aggregate per counterpart
+	q := `
+      WITH pairs AS (
+        SELECT
+          CASE WHEN sender_id = $1 THEN recipient_id ELSE sender_id END AS other_id,
+          body,
+          created_at,
+          sender_id,
+          recipient_id,
+          read_at
+        FROM user_messages
+        WHERE sender_id = $1 OR recipient_id = $1
+      ),
+      latest AS (
+        SELECT DISTINCT ON (other_id)
+          other_id,
+          body,
+          created_at,
+          sender_id,
+          recipient_id,
+          read_at
+        FROM pairs
+        ORDER BY other_id, created_at DESC
+      ),
+      unread AS (
+        SELECT
+          sender_id AS other_id,
+          COUNT(*) AS unread_count
+        FROM user_messages
+        WHERE recipient_id = $1 AND read_at IS NULL
+        GROUP BY sender_id
+      )
+      SELECT
+        l.other_id,
+        l.body,
+        l.created_at,
+        CASE WHEN l.sender_id = $1 THEN 'out' ELSE 'in' END AS direction,
+        COALESCE(u.unread_count, 0) AS unread_count
+      FROM latest l
+      LEFT JOIN unread u ON u.other_id = l.other_id
+      ORDER BY l.created_at DESC
+      LIMIT 50`
+	rows, err := db.Queryx(q, me)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	defer rows.Close()
+	out := []messageThread{}
+	for rows.Next() {
+		var th messageThread
+		var dir string
+		if err := rows.Scan(&th.UserID, &th.LastMessage, &th.LastAt, &dir, &th.UnreadCount); err != nil {
+			continue
+		}
+		th.LastDirection = dir
+		out = append(out, th)
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": out})
+}
+
+func listMessagesWith(c *fiber.Ctx, db *sqlx.DB) error {
+	me := strings.TrimSpace(userIDFromContext(c))
+	if me == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "login required"})
+	}
+	other := strings.TrimSpace(c.Params("userId"))
+	if other == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "userId required"})
+	}
+	if _, err := uuid.Parse(other); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid userId"})
+	}
+	beforeStr := strings.TrimSpace(c.Query("before"))
+	limit := 50
+	var beforeID int64
+	if beforeStr != "" {
+		if v, err := strconv.ParseInt(beforeStr, 10, 64); err == nil && v > 0 {
+			beforeID = v
+		}
+	}
+	args := []any{me, other, other, me}
+	where := "((sender_id=$1 AND recipient_id=$2) OR (sender_id=$3 AND recipient_id=$4))"
+	if beforeID > 0 {
+		where += " AND id < $5"
+		args = append(args, beforeID)
+	}
+	query := `
+      SELECT id, sender_id, recipient_id, body, created_at, read_at
+      FROM user_messages
+      WHERE ` + where + `
+      ORDER BY id DESC
+      LIMIT $` + strconv.Itoa(len(args)+1)
+	args = append(args, limit)
+	rows, err := db.Queryx(query, args...)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
+	}
+	defer rows.Close()
+	type msg struct {
+		ID          int64      `json:"id"`
+		SenderID    string     `json:"sender_id"`
+		RecipientID string     `json:"recipient_id"`
+		Body        string     `json:"body"`
+		CreatedAt   time.Time  `json:"created_at"`
+		ReadAt      *time.Time `json:"read_at,omitempty"`
+	}
+	out := []msg{}
+	for rows.Next() {
+		var m msg
+		var readAt sql.NullTime
+		if err := rows.Scan(&m.ID, &m.SenderID, &m.RecipientID, &m.Body, &m.CreatedAt, &readAt); err != nil {
+			continue
+		}
+		if readAt.Valid {
+			t := readAt.Time
+			m.ReadAt = &t
+		}
+		out = append(out, m)
+	}
+	// mark messages from other -> me as read
+	_, _ = db.Exec("UPDATE user_messages SET read_at=now() WHERE sender_id=$1 AND recipient_id=$2 AND read_at IS NULL", other, me)
+	// reverse for chronological ascending on client
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": out})
+}
+
+var (
+	messageSubscribers   = map[string]map[chan map[string]any]struct{}{}
+	messageSubscribersMu sync.Mutex
+)
+
+func broadcastMessageEvent(evt map[string]any, recipientID string) {
+	messageSubscribersMu.Lock()
+	defer messageSubscribersMu.Unlock()
+	targets := []string{recipientID}
+	// also notify sender for echo
+	if s, ok := evt["sender_id"].(string); ok {
+		if s != "" && s != recipientID {
+			targets = append(targets, s)
+		}
+	}
+	for _, uid := range targets {
+		subs := messageSubscribers[uid]
+		for ch := range subs {
+			select {
+			case ch <- evt:
+			default:
+			}
+		}
+	}
+}
+
+func sendMessage(c *fiber.Ctx, db *sqlx.DB) error {
+	me := strings.TrimSpace(userIDFromContext(c))
+	if me == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "login required"})
+	}
+	other := strings.TrimSpace(c.Params("userId"))
+	if other == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "userId required"})
+	}
+	if _, err := uuid.Parse(other); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "invalid userId"})
+	}
+	var body struct {
+		Body string `json:"body"`
+	}
+	if err := c.BodyParser(&body); err != nil || strings.TrimSpace(body.Body) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "body required"})
+	}
+	var id int64
+	if err := db.QueryRowx("INSERT INTO user_messages(sender_id, recipient_id, body) VALUES ($1,$2,$3) RETURNING id", me, other, body.Body).Scan(&id); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "create failed"})
+	}
+	var created time.Time
+	_ = db.Get(&created, "SELECT created_at FROM user_messages WHERE id=$1", id)
+	evt := map[string]any{
+		"id":           id,
+		"sender_id":    me,
+		"recipient_id": other,
+		"body":         body.Body,
+		"created_at":   created.Format(time.RFC3339),
+	}
+	broadcastMessageEvent(evt, other)
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"success": true, "message": "sent", "data": evt})
 }
 
 // resolveUsername proxies to Core API /v1/users/search and returns best match

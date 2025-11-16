@@ -1,0 +1,90 @@
+<main class="max-w-5xl mx-auto p-4 h-[calc(100vh-120px)] flex gap-4">
+  <section class="w-72 border border-slate-200 dark:border-slate-800 rounded-xl bg-white/80 dark:bg-slate-900/70 flex flex-col">
+    <header class="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+      <h1 class="m-0 text-sm font-semibold text-slate-800 dark:text-slate-100">Messages</h1>
+      <button type="button" (click)="refreshThreads()" class="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+        Refresh
+      </button>
+    </header>
+    <div class="flex-1 overflow-y-auto">
+      <div *ngIf="(threads$ | async)?.length === 0" class="px-4 py-6 text-xs text-slate-500 dark:text-slate-400">
+        No conversations yet. Start by replying to someone’s post.
+      </div>
+      <button
+        type="button"
+        *ngFor="let t of (threads$ | async)"
+        class="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/80 border-b border-slate-100/60 dark:border-slate-800/60"
+        (click)="selectThread(t.user_id || t.userId)"
+      >
+        <div class="relative">
+          <app-user-avatar [id]="t.user_id || t.userId" [src]="null" [size]="32"></app-user-avatar>
+          <span *ngIf="t.unread_count > 0"
+            class="absolute -top-1 -right-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px]">
+            {{ t.unread_count }}
+          </span>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <span class="text-xs font-medium text-slate-800 dark:text-slate-100 truncate">
+            {{ t.user_id || t.userId }}
+          </span>
+          <span class="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+            {{ t.last_message || t.lastMessage }}
+          </span>
+        </div>
+      </button>
+    </div>
+  </section>
+
+  <section class="flex-1 border border-slate-200 dark:border-slate-800 rounded-xl bg-white/80 dark:bg-slate-900/70 flex flex-col">
+    <header class="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+      <ng-container *ngIf="(activeUserId$ | async) as active">
+        <div *ngIf="active; else noConversation" class="text-xs font-semibold text-slate-700 dark:text-slate-200">
+          Conversation with <span class="font-mono">{{ active }}</span>
+        </div>
+        <ng-template #noConversation>
+          <div class="text-xs text-slate-500 dark:text-slate-400">
+            Select a conversation to start messaging.
+          </div>
+        </ng-template>
+      </ng-container>
+    </header>
+
+    <div class="flex-1 overflow-y-auto px-4 py-3 space-y-2 text-xs">
+      <div *ngFor="let m of (messages$ | async)" class="flex">
+        <div class="ml-auto max-w-[70%] px-3 py-2 rounded-2xl bg-blue-600 text-white text-left" *ngIf="m.sender_id === (activeUserId$ | async); else incoming">
+          <div class="whitespace-pre-line break-words">{{ m.body }}</div>
+          <div class="mt-1 text-[10px] text-blue-100 opacity-80">
+            {{ m.created_at | date:'shortTime' }}
+          </div>
+        </div>
+        <ng-template #incoming>
+          <div class="mr-auto max-w-[70%] px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-50 text-left">
+            <div class="whitespace-pre-line break-words">{{ m.body }}</div>
+            <div class="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+              {{ m.created_at | date:'shortTime' }}
+            </div>
+          </div>
+        </ng-template>
+      </div>
+    </div>
+
+    <form class="border-t border-slate-100 dark:border-slate-800 px-3 py-2 flex items-end gap-2" (ngSubmit)="send()">
+      <textarea
+        [(ngModel)]="messageText"
+        name="message"
+        rows="2"
+        placeholder="Type a message..."
+        class="flex-1 resize-none px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 text-xs text-slate-800 dark:text-slate-100"
+      ></textarea>
+      <button
+        type="submit"
+        [disabled]="!messageText.trim().length || sending"
+        class="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        <span class="material-symbols-outlined text-[18px] mr-1">send</span>
+        Send
+      </button>
+    </form>
+  </section>
+</main>
+

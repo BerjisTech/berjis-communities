@@ -237,6 +237,30 @@ export class ApiService {
     return this.post<{ success: boolean; data: { view_count: number } }>(`${this.svcBase()}/v1/posts/${id}/view`, {});
   }
 
+  // User preferences (Communities-scoped)
+  getPreferences() {
+    return this.get<{ success: boolean; data: any }>(`${this.svcBase()}/v1/me/preferences`);
+  }
+
+  updatePreferences(body: any) {
+    return this.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/me/preferences`, body);
+  }
+
+  // Messages
+  listMessageThreads() {
+    return this.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/messages/threads`);
+  }
+
+  listMessagesWith(userId: string, before?: number) {
+    const base = `${this.svcBase()}/v1/messages/with/${encodeURIComponent(userId)}`;
+    const url = before ? `${base}?before=${before}` : base;
+    return this.get<{ success: boolean; data: any[] }>(url);
+  }
+
+  sendMessage(userId: string, body: string) {
+    return this.post<{ success: boolean; data: any }>(`${this.svcBase()}/v1/messages/with/${encodeURIComponent(userId)}`, { body });
+  }
+
   listComments(postId: number) {
     return this.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/posts/${postId}/comments`);
   }

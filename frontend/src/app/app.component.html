@@ -31,7 +31,7 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-4 h-screen w-full overflow-hidden p-0 m-0">
     <div #leftSideBar class="hidden lg:block col-span-1 h-screen overflow-y-auto overflow-x-hidden">
-      <div #userAvatar class="h-[200px] flex items-center justify-center" *ngIf="currentUser">
+      <div #userAvatarContainer class="h-[200px] flex items-center justify-center" *ngIf="currentUser">
         <app-user-avatar [id]="currentUser?.id || currentUser?.uuid" [src]="userAvatar" [size]="150"></app-user-avatar>
       </div>
       <div class="flex items-center justify-center gap-6 py-2" *ngIf="currentUser">
@@ -69,12 +69,12 @@
         </a>
       </div>
       <div #ads class="mx-auto w-[250px] flex items-center justify-center h-[250px]">
-        <div class="relative w-full h-full border-[2px] border-dashed border-orange-400 rounded-md">
+        <div class="relative w-full h-full border-2 border-dashed border-orange-400 rounded-md">
           <div
             class="w-[100px] h-[100px] absolute bottom-[-25px] left-[-25px] shadow bg-gradient-to-tl from-teal-400 to-cyan-300 rounded-full">
           </div>
           <div
-            class="w-[100px] h-[100px] absolute top-[-20px] right-[-20px] shadow bg-gradient-to-r from-rose-400 to-orange-300 rounded-full">
+            class="w-[100px] h-[100px] absolute -top-5 -right-5 shadow bg-gradient-to-r from-rose-400 to-orange-300 rounded-full">
           </div>
           <div class="w-[150px] h-[150px] absolute top-[50px] right-[50px] rounded-xl shadow bg-green-200"></div>
           <div
@@ -93,8 +93,73 @@
       <div #stories *ngIf="currentUser" class="px-2 py-2">
         <app-story-strip [me]="currentUser"></app-story-strip>
       </div>
-      <div #suggestions></div>
-      <div #recommendations></div>
+      <section #suggestions class="px-4 py-4 space-y-4">
+        <h2 class="text-xs font-semibold tracking-[0.2em] text-slate-500 dark:text-slate-400 uppercase">Suggestions</h2>
+        <div class="space-y-3">
+          <div>
+            <div class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Trending tags</div>
+            <div *ngIf="!suggestedTags.length && !loadingSuggestions" class="text-xs text-slate-400 dark:text-slate-500">
+              No tags to show yet.
+            </div>
+            <div *ngIf="loadingSuggestions" class="text-xs text-slate-400 dark:text-slate-500">Loading suggestions...</div>
+            <div *ngFor="let t of suggestedTags" class="flex items-center justify-between py-1">
+              <a [routerLink]="'/explore'" [queryParams]="{ tag: t.tag }"
+                class="text-sm text-blue-700 dark:text-blue-300 hover:underline">
+                #{{ t.tag }}
+              </a>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ t.count }} posts</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Posts to check out</div>
+            <div *ngIf="!suggestedPosts.length && !loadingSuggestions" class="text-xs text-slate-400 dark:text-slate-500">
+              New posts will appear here.
+            </div>
+            <div *ngFor="let p of suggestedPosts" class="mb-2 rounded-lg border border-slate-200/70 dark:border-slate-700/70 bg-white/70 dark:bg-slate-900/60 p-2">
+              <div class="flex items-center gap-2 mb-1">
+                <img [src]="userAvatarById(p.user_id)" class="w-6 h-6 rounded-full" alt="" />
+                <div class="flex flex-col">
+                  <span class="text-xs font-medium text-slate-800 dark:text-slate-200">
+                    {{ userName(p.user_id) }}
+                  </span>
+                </div>
+              </div>
+              <div class="text-xs text-slate-700 dark:text-slate-300 line-clamp-3">
+                {{ (p.title || p.body || '') | slice:0:120 }}<span *ngIf="(p.title || p.body || '').length > 120">…</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section #recommendations class="px-4 pb-6 space-y-3">
+        <h2 class="text-xs font-semibold tracking-[0.2em] text-slate-500 dark:text-slate-400 uppercase">Who to follow</h2>
+        <div *ngIf="!recommendedUserIds.length && !loadingSuggestions" class="text-xs text-slate-400 dark:text-slate-500">
+          We’ll suggest active community members here.
+        </div>
+        <div *ngFor="let id of recommendedUserIds" class="flex items-center justify-between py-2">
+          <div class="flex items-center gap-3 min-w-0">
+            <app-user-avatar [id]="id" [src]="userAvatarById(id)" [size]="36"></app-user-avatar>
+            <div class="flex flex-col min-w-0">
+              <span class="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
+                {{ userName(id) }}
+              </span>
+              <span *ngIf="userHandleForId(id)" class="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                {{ '@' + userHandleForId(id) }}
+              </span>
+            </div>
+          </div>
+          <button type="button"
+            class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium border border-blue-600 text-blue-700 bg-blue-50 hover:bg-blue-100 dark:border-blue-300 dark:text-blue-100 dark:bg-blue-900/40 dark:hover:bg-blue-900/70"
+            (click)="toggleFollow(id)">
+            <span class="material-symbols-outlined text-[16px] leading-none">
+              {{ isFollowing(id) ? 'check' : 'add' }}
+            </span>
+            <span>{{ isFollowing(id) ? 'Following' : 'Follow' }}</span>
+          </button>
+        </div>
+      </section>
       <div class="hidden lg:flex items-center gap-2">
         <a href="http://berjis.tech/account"
           class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur hover:bg-gray-100 dark:bg-slate-800 dark:text-white">Account</a>
