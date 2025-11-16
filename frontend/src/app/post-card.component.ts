@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService, linkHashtags } from './api.service';
+import { ApiService, formatPostContent } from './api.service';
 import { UserAvatarComponent } from './user-avatar.component';
 
 @Component({
@@ -164,7 +164,7 @@ export class PostCardComponent implements OnChanges {
   }
 
   render(content: string): string {
-    return linkHashtags(content || '');
+    return formatPostContent(content || '');
   }
 
   userName(id: any) {

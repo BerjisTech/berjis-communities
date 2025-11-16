@@ -273,6 +273,121 @@ export class ApiService {
   }
 }
 
-export function linkHashtags(text: string): string {
+function escapeHtml(input: string): string {
+  return (input || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function applyInlineFormatting(text: string): string {
+  let s = text || '';
+  // inline code
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // bold
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // italics
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  return s;
+}
+
+function linkHashtags(text: string): string {
   return (text || '').replace(/(^|\s)#(\w+)/g, (_m, p1, tag) => `${p1}<a href="/explore?tag=${encodeURIComponent(tag)}">#${tag}</a>`);
+}
+
+function linkMentions(text: string): string {
+  return (text || '').replace(/(^|[^\w])@([a-zA-Z0-9_.]+)/g, (_m, p1, handle) => {
+    const safe = encodeURIComponent(handle);
+    return `${p1}<a href="/u/${safe}">@${handle}</a>`;
+  });
+}
+
+function replaceEmojiShortcodes(text: string): string {
+  const map: Record<string, string> = {
+    ':sparkles:': '✨',
+    ':zap:': '⚡',
+    ':satellite:': '🛰️',
+    ':tools:': '🛠️',
+    ':dart:': '🎯',
+    ':antenna:': '📡',
+    ':earth:': '🌍',
+    ':rocket:': '🚀',
+  };
+  let out = text || '';
+  for (const key of Object.keys(map)) {
+    out = out.split(key).join(map[key]);
+  }
+  return out;
+}
+
+export function formatPostContent(raw: string): string {
+  const escaped = escapeHtml(raw || '');
+  const lines = escaped.split(/\r?\n/);
+  const html: string[] = [];
+  let inUl = false;
+  let inOl = false;
+
+  const closeLists = () => {
+    if (inUl) {
+      html.push('</ul>');
+      inUl = false;
+    }
+    if (inOl) {
+      html.push('</ol>');
+      inOl = false;
+    }
+  };
+
+  for (const lineRaw of lines) {
+    const line = lineRaw.trim();
+    if (!line) {
+      closeLists();
+      continue;
+    }
+
+    // Blockquote
+    if (line.startsWith('&gt;')) {
+      closeLists();
+      const content = line.replace(/^&gt;\s*/, '');
+      html.push(`<blockquote>${applyInlineFormatting(content)}</blockquote>`);
+      continue;
+    }
+
+    // Unordered list
+    const ulMatch = line.match(/^[-*]\s+(.*)$/);
+    if (ulMatch) {
+      if (!inUl) {
+        closeLists();
+        inUl = true;
+        html.push('<ul>');
+      }
+      html.push(`<li>${applyInlineFormatting(ulMatch[1])}</li>`);
+      continue;
+    }
+
+    // Ordered list
+    const olMatch = line.match(/^\d+\.\s+(.*)$/);
+    if (olMatch) {
+      if (!inOl) {
+        closeLists();
+        inOl = true;
+        html.push('<ol>');
+      }
+      html.push(`<li>${applyInlineFormatting(olMatch[1])}</li>`);
+      continue;
+    }
+
+    // Paragraph
+    closeLists();
+    html.push(`<p>${applyInlineFormatting(line)}</p>`);
+  }
+  closeLists();
+
+  let result = html.join('\n');
+  result = replaceEmojiShortcodes(result);
+  result = linkMentions(result);
+  result = linkHashtags(result);
+  return result;
 }

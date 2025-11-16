@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiService, linkHashtags } from './api.service';
+import { ApiService, formatPostContent } from './api.service';
 
 @Component({
   selector: 'app-explore',
@@ -26,6 +26,6 @@ export class ExploreComponent implements OnInit {
       error: () => { this.loading = false; }
     });
   }
-  render(s: string) { return linkHashtags(s || ''); }
+  render(s: string) { return formatPostContent(s || ''); }
 }
 
