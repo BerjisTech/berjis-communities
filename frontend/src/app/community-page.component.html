@@ -1,33 +1,113 @@
-
-  <header class="bg-blue-600 text-white px-6 py-4"><h1 class="m-0 text-xl font-semibold">Community</h1></header>
-  <main class="max-w-4xl mx-auto p-6">
-    <ng-container *ngIf="vm$ | async as vm">
-      <div *ngIf="vm.loading">Loading…</div>
-      <section *ngIf="!vm.loading && vm.community">
-        <h2>/c/{{vm.community.slug}}</h2>
-        <p>{{vm.community.description}}</p>
-        <div style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap">
-          <button (click)="join(vm.community.id)" [disabled]="vm.community.current_user_banned" style="background:#0b5fff;color:#fff;padding:6px 10px;border:none;border-radius:6px">Join</button>
-          <a href="/create" style="color:#0b5fff;padding:6px 10px">Open Composer</a>
+<ng-container *ngIf="vm$ | async as vm">
+  <section class="bg-app-gradient bg-app-gradient-animated text-slate-900 dark:text-slate-100 shadow-brand">
+    <div class="max-w-5xl mx-auto px-6 py-10 flex flex-col gap-6 lg:flex-row lg:items-center">
+      <div class="flex-1">
+        <p class="uppercase text-xs tracking-[0.3em] text-slate-500 dark:text-slate-300 mb-2">Community</p>
+        <h1 class="text-3xl font-semibold capitalize">{{ vm.community?.name }}</h1>
+        <p class="text-slate-600 dark:text-slate-200 mt-3 max-w-2xl">
+          {{ vm.community?.description }}
+        </p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <span class="px-3 py-1 rounded-full bg-white/80 text-slate-800 border border-blue-100 dark:bg-slate-900/40 dark:text-slate-100 dark:border-slate-700">
+            /c/{{ vm.community?.slug }}
+          </span>
+          <span class="px-3 py-1 rounded-full bg-white/80 text-slate-800 border border-blue-100 dark:bg-slate-900/40 dark:text-slate-100 dark:border-slate-700"
+                *ngFor="let tag of vm.community?.hashtags | slice:0:3">
+            #{{ tag }}
+          </span>
         </div>
-        <section *ngIf="!vm.community.current_user_banned" style="margin:16px 0">
-          <app-post-create [communityId]="vm.community.id"></app-post-create>
-        </section>
-        <details *ngIf="vm.community.current_user_role === 'owner' || vm.community.current_user_role === 'admin'">
-          <summary>Admin Tools</summary>
-          <div style="margin-top:8px;display:grid;gap:8px;max-width:420px">
-            <input #userIdInput type="number" placeholder="User ID" style="padding:8px;border:1px solid #e5e7eb;border-radius:6px">
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button (click)="setRole(vm.community.id, userIdInput.value, 'admin')" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px">Make Admin</button>
-              <button (click)="setRole(vm.community.id, userIdInput.value, 'member')" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px">Revoke Admin</button>
-              <button (click)="ban(vm.community.id, userIdInput.value, 'ban')" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;color:#991b1b">Ban</button>
-              <button (click)="ban(vm.community.id, userIdInput.value, 'unban')" style="padding:6px 10px;border:1px solid #e5e7eb;border-radius:6px;color:#065f46">Unban</button>
-            </div>
-            <div style="color:#991b1b" *ngIf="vm.error">{{vm.error}}</div>
-            <div style="color:#065f46" *ngIf="vm.message">{{vm.message}}</div>
-          </div>
-        </details>
+      </div>
+      <div class="flex flex-col gap-3 w-full lg:w-60">
+        <button class="btn-primary justify-center" type="button" (click)="joinCommunity()" [disabled]="vm.community?.current_user_banned">
+          {{ vm.community?.current_user_role ? 'Joined' : 'Join' }}
+        </button>
+        <a class="inline-flex items-center justify-center rounded-xl border border-blue-900/20 px-4 py-2 font-semibold text-blue-900 dark:border-slate-700 dark:text-slate-100"
+           href="/create"
+           (click)="openComposer($event)"
+           [class.opacity-50]="vm.community?.current_user_banned"
+           [class.pointer-events-none]="vm.community?.current_user_banned">
+          Compose for /c/{{ vm.community?.slug }}
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <div class="max-w-5xl mx-auto px-6 mt-4 space-y-3" *ngIf="vm.error || feedback || feedbackError">
+    <div *ngIf="vm.error" class="rounded-xl border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200 px-4 py-2 text-sm">
+      {{ vm.error }}
+    </div>
+    <div *ngIf="feedback" class="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200 px-4 py-2 text-sm">
+      {{ feedback }}
+    </div>
+    <div *ngIf="feedbackError" class="rounded-xl border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200 px-4 py-2 text-sm">
+      {{ feedbackError }}
+    </div>
+  </div>
+
+  <main class="max-w-5xl mx-auto px-6 py-8 grid gap-6 lg:grid-cols-[2fr,1fr]">
+    <section class="card rounded-2xl p-5">
+      <header class="flex items-center justify-between mb-4">
+        <div>
+          <p class="text-lg font-semibold text-slate-900 dark:text-white">Latest posts</p>
+          <p class="text-sm text-slate-500 dark:text-slate-400">Fresh drop from members inside /c/{{ vm.community?.slug }}.</p>
+        </div>
+      </header>
+      <div *ngIf="vm.loading" class="text-slate-500 dark:text-slate-300 py-6 text-center">Loading stream...</div>
+      <div *ngIf="!vm.loading && !vm.posts.length" class="text-slate-500 dark:text-slate-300 py-6 text-center">
+        No public conversations yet. Be the first to post!
+      </div>
+      <app-post-card
+        *ngFor="let post of vm.posts"
+        [post]="post"
+        [users]="vm.users">
+      </app-post-card>
+      <section *ngIf="!vm.community?.current_user_banned" class="mt-6">
+        <app-post-create [communityId]="vm.community?.id"></app-post-create>
       </section>
-    </ng-container>
+    </section>
+
+    <aside class="space-y-6">
+      <section class="card rounded-2xl p-5">
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-3">Channels</h2>
+        <div class="flex flex-wrap gap-2">
+          <span *ngFor="let channel of vm.channels"
+                class="px-3 py-1 text-sm rounded-full bg-blue-50 text-blue-800 border border-blue-100 dark:bg-blue-900/40 dark:text-blue-100 dark:border-blue-800">
+            #{{ channel.slug }}
+          </span>
+          <span *ngIf="!vm.channels.length" class="text-sm text-slate-500 dark:text-slate-400">No channels yet.</span>
+        </div>
+      </section>
+
+      <section class="card rounded-2xl p-5" *ngIf="vm.community?.current_user_role === 'owner' || vm.community?.current_user_role === 'admin'">
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-3">Moderator tools</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Update roles or resolve bans directly from the page.</p>
+        <input type="text"
+               [(ngModel)]="adminInput"
+               placeholder="User UUID"
+               class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/40 px-3 py-2 mb-3 text-sm" />
+        <div class="flex flex-wrap gap-2 text-sm">
+          <button class="px-3 py-2 rounded-xl border border-blue-200 text-blue-900 dark:border-blue-700 dark:text-blue-100"
+                  type="button"
+                  (click)="setRole('admin')">
+            Promote to admin
+          </button>
+          <button class="px-3 py-2 rounded-xl border border-blue-200 text-blue-900 dark:border-blue-700 dark:text-blue-100"
+                  type="button"
+                  (click)="setRole('member')">
+            Reset role
+          </button>
+          <button class="px-3 py-2 rounded-xl border border-rose-300 text-rose-800 dark:border-rose-600 dark:text-rose-200"
+                  type="button"
+                  (click)="ban('ban')">
+            Ban member
+          </button>
+          <button class="px-3 py-2 rounded-xl border border-emerald-300 text-emerald-700 dark:border-emerald-500 dark:text-emerald-200"
+                  type="button"
+                  (click)="ban('unban')">
+            Lift ban
+          </button>
+        </div>
+      </section>
+    </aside>
   </main>
-  
+</ng-container>

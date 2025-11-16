@@ -36,3 +36,43 @@ a { @apply text-blue-400 hover:text-blue-500 underline-offset-4 decoration-blue-
 /* Cards */
 .card { @apply border border-blue-900/20 bg-white/90; box-shadow: 0 8px 40px var(--color-shadow-light); }
 .dark .card { @apply border-slate-800 bg-slate-900/80; box-shadow: 0 8px 40px var(--color-shadow-dark); }
+
+/* Top Right */
+.brand-radial-bg-tr {
+  background: radial-gradient(at 100% 0%, rgb(239 246 255) 0%, rgb(248 250 252) 100%);
+}
+
+.brand-radial-bg-tr.dark,
+.dark .brand-radial-bg-tr {
+  background: radial-gradient(at 100% 0%, rgb(30 58 138) 0%, rgb(15 23 42) 100%);
+}
+
+/* Top Left */
+.brand-radial-bg-tl {
+  background: radial-gradient(at 0% 0%, rgb(239 246 255) 0%, rgb(248 250 252) 100%);
+}
+
+.brand-radial-bg-tl.dark,
+.dark .brand-radial-bg-tl {
+  background: radial-gradient(at 0% 0%, rgb(30 58 138) 0%, rgb(15 23 42) 100%);
+}
+
+/* Bottom Right */
+.brand-radial-bg-br {
+  background: radial-gradient(at 100% 100%, rgb(239 246 255) 0%, rgb(248 250 252) 100%);
+}
+
+.brand-radial-bg-br.dark,
+.dark .brand-radial-bg-br {
+  background: radial-gradient(at 100% 100%, rgb(30 58 138) 0%, rgb(15 23 42) 100%);
+}
+
+/* Bottom Left */
+.brand-radial-bg-bl {
+  background: radial-gradient(at 0% 100%, rgb(239 246 255) 0%, rgb(248 250 252) 100%);
+}
+
+.brand-radial-bg-bl.dark,
+.dark .brand-radial-bg-bl {
+  background: radial-gradient(at 0% 100%, rgb(30 58 138) 0%, rgb(15 23 42) 100%);
+}

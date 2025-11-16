@@ -79,12 +79,25 @@ export class ApiService {
     return this.get<{ success: boolean; data: any }>(`${this.svcBase()}/v1/communities/by-slug/${encodeURIComponent(slug)}`);
   }
 
+  getCommunityChannels(id: number) {
+    return this.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/communities/${id}/channels`);
+  }
+
   listGroups() {
     return this.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/groups`);
   }
 
   getGroupBySlug(slug: string) {
     return this.get<{ success: boolean; data: any }>(`${this.svcBase()}/v1/groups/by-slug/${encodeURIComponent(slug)}`);
+  }
+
+  getChannelPosts(channelId: number) {
+    return this.get<{ success: boolean; data: any[] }>(`${this.svcBase()}/v1/channels/${channelId}/posts`);
+  }
+
+  getUserByUsername(username: string) {
+    const handle = username.startsWith('@') ? username.substring(1) : username;
+    return this.get<{ success: boolean; data: any }>(`${this.svcBase()}/v1/users/by-username/${encodeURIComponent(handle)}`);
   }
 
   createCommunity(body: { name: string; slug: string; description?: string; visibility?: string; access?: string; hashtags?: string[] }) {

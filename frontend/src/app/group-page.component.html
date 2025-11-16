@@ -1,21 +1,61 @@
+<ng-container *ngIf="vm$ | async as vm">
+  <section class="bg-app-gradient bg-app-gradient-animated text-slate-900 dark:text-slate-100 shadow-brand">
+    <div class="max-w-4xl mx-auto px-6 py-10 flex flex-col gap-4">
+      <p class="uppercase text-xs tracking-[0.3em] text-slate-500 dark:text-slate-300">Group</p>
+      <h1 class="text-3xl font-semibold capitalize">{{ vm.group?.name }}</h1>
+      <p class="text-slate-600 dark:text-slate-200 max-w-2xl">
+        {{ vm.group?.description }}
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <span class="px-3 py-1 rounded-full bg-white/80 text-slate-800 border border-blue-100 dark:bg-slate-900/40 dark:text-slate-100 dark:border-slate-700">
+          /g/{{ vm.group?.slug }}
+        </span>
+      </div>
+      <div class="flex flex-wrap gap-3 mt-4">
+        <button class="btn-primary" type="button" (click)="joinGroup()">
+          {{ vm.group?.current_user_role ? 'Joined' : 'Join group' }}
+        </button>
+        <a class="inline-flex items-center justify-center rounded-xl border border-blue-900/20 px-4 py-2 font-semibold text-blue-900 dark:border-slate-700 dark:text-slate-100"
+           href="/create"
+           (click)="openComposer($event)">
+          Share something
+        </a>
+      </div>
+    </div>
+  </section>
 
-  <header class="bg-blue-600 text-white px-6 py-4"><h1 class="m-0 text-xl font-semibold">Group</h1></header>
-  <main class="max-w-4xl mx-auto p-6">
-    <ng-container *ngIf="vm$ | async as vm">
-      <div *ngIf="vm.loading">Loading…</div>
-      <section *ngIf="!vm.loading && vm.group">
-        <h2>/g/{{vm.group.slug}}</h2>
-        <p>{{vm.group.description}}</p>
-        <div style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap">
-          <button (click)="join(vm.group.id)" [disabled]="vm.group.current_user_banned" style="background:#0b5fff;color:#fff;padding:6px 10px;border:none;border-radius:6px">Join</button>
-          <a href="/create" style="color:#0b5fff;padding:6px 10px">Open Composer</a>
+  <div class="max-w-4xl mx-auto px-6 mt-4 space-y-3" *ngIf="vm.error || feedback || feedbackError">
+    <div *ngIf="vm.error" class="rounded-xl border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200 px-4 py-2 text-sm">
+      {{ vm.error }}
+    </div>
+    <div *ngIf="feedback" class="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200 px-4 py-2 text-sm">
+      {{ feedback }}
+    </div>
+    <div *ngIf="feedbackError" class="rounded-xl border border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200 px-4 py-2 text-sm">
+      {{ feedbackError }}
+    </div>
+  </div>
+
+  <main class="max-w-4xl mx-auto px-6 py-8">
+    <section class="card rounded-2xl p-5">
+      <header class="flex items-center justify-between mb-4">
+        <div>
+          <p class="text-lg font-semibold text-slate-900 dark:text-white">Group feed</p>
+          <p class="text-sm text-slate-500 dark:text-slate-400">Hybrid Twitter/Reddit layout for quick drops and deep dives.</p>
         </div>
-        <section *ngIf="!vm.group.current_user_banned" style="margin:16px 0">
-          <app-post-create [groupId]="vm.group.id"></app-post-create>
-        </section>
-        <div style="color:#991b1b" *ngIf="vm.error">{{vm.error}}</div>
-        <div style="color:#065f46" *ngIf="vm.message">{{vm.message}}</div>
+      </header>
+      <div *ngIf="vm.loading" class="text-slate-500 dark:text-slate-300 py-6 text-center">Loading threads...</div>
+      <div *ngIf="!vm.loading && !vm.posts.length" class="text-slate-500 dark:text-slate-300 py-6 text-center">
+        Nothing published yet. Kick things off with a post!
+      </div>
+      <app-post-card
+        *ngFor="let post of vm.posts"
+        [post]="post"
+        [users]="vm.users">
+      </app-post-card>
+      <section class="mt-6" *ngIf="!vm.group?.current_user_banned">
+        <app-post-create [groupId]="vm.group?.id"></app-post-create>
       </section>
-    </ng-container>
+    </section>
   </main>
-  
+</ng-container>

@@ -1,6 +1,102 @@
+<ng-container *ngIf="vm$ | async as vm">
+  <section class="bg-app-gradient bg-app-gradient-animated text-slate-900 dark:text-slate-100 shadow-brand">
+    <div class="max-w-5xl mx-auto px-6 py-10 flex flex-col gap-6 lg:flex-row lg:items-center">
+      <div class="flex items-start gap-4">
+        <app-user-avatar [id]="vm.profile?.uuid || vm.profile?.id" [src]="vm.profile?.avatarUrl || vm.profile?.avatar_url" [size]="96"></app-user-avatar>
+        <div>
+          <p class="text-2xl font-semibold">{{ displayName(vm.profile) }}</p>
+          <p class="text-sm text-slate-600 dark:text-slate-300">{{ displayHandle(vm.profile) }}</p>
+          <p class="mt-3 text-base text-slate-700 dark:text-slate-200 max-w-xl" *ngIf="profileBio(vm.profile)">
+            {{ profileBio(vm.profile) }}
+          </p>
+          <div class="mt-3 text-sm text-slate-600 dark:text-slate-300 flex flex-wrap gap-3" *ngIf="profileLocation(vm.profile)">
+            <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/80 dark:bg-slate-900/50 border border-blue-200/60 dark:border-slate-700">
+              <span class="text-blue-700 dark:text-blue-300">📍</span> {{ profileLocation(vm.profile) }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-col gap-3 w-full lg:w-64">
+        <button class="btn-primary justify-center" type="button" (click)="toggleFollow()" [disabled]="!vm.profile">
+          {{ vm.isFollowing ? 'Following' : 'Follow' }}
+        </button>
+        <a class="inline-flex items-center justify-center rounded-xl border border-blue-900/20 px-4 py-2 font-semibold text-blue-900 dark:border-slate-700 dark:text-slate-100"
+           href="/me/posts">
+          Open Composer
+        </a>
+      </div>
+    </div>
+    <div class="max-w-5xl mx-auto px-6 pb-6 flex flex-wrap gap-6 text-center text-sm uppercase tracking-wide text-slate-600 dark:text-slate-300">
+      <div class="flex-1 min-w-[120px]">
+        <div class="text-3xl font-bold text-blue-900 dark:text-amber-300">{{ vm.postsCount }}</div>
+        <div>Posts</div>
+      </div>
+      <div class="flex-1 min-w-[120px]">
+        <div class="text-3xl font-bold text-blue-900 dark:text-amber-300">{{ vm.followers.length }}</div>
+        <div>Followers</div>
+      </div>
+      <div class="flex-1 min-w-[120px]">
+        <div class="text-3xl font-bold text-blue-900 dark:text-amber-300">{{ vm.following.length }}</div>
+        <div>Following</div>
+      </div>
+    </div>
+  </section>
 
-  <header class="bg-blue-600 text-white px-6 py-4"><h1 class="m-0 text-xl font-semibold">User</h1></header>
-  <main class="max-w-4xl mx-auto p-6">
-    <p>User profiles are managed via main account on berjis.tech (Core API). This page will fetch from /api when available.</p>
+  <div class="max-w-5xl mx-auto px-6 mt-4 space-y-3" *ngIf="feedback || feedbackError">
+    <div class="rounded-xl border px-4 py-2 text-sm"
+         [ngClass]="feedback ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200'">
+      {{ feedback || feedbackError }}
+    </div>
+  </div>
+
+  <main class="max-w-5xl mx-auto px-6 py-8 grid gap-6 lg:grid-cols-[3fr,2fr]">
+    <section class="card rounded-2xl p-5 lg:col-span-1">
+      <header class="flex items-center justify-between mb-4">
+        <div>
+          <p class="text-lg font-semibold text-slate-900 dark:text-white">Latest posts</p>
+          <p class="text-sm text-slate-500 dark:text-slate-400">Chronological mix of long-form and quick-hit updates.</p>
+        </div>
+      </header>
+      <div *ngIf="vm.loading" class="text-slate-500 dark:text-slate-300 py-6 text-center">Loading timeline...</div>
+      <div *ngIf="!vm.loading && !vm.posts.length" class="text-slate-500 dark:text-slate-300 py-6 text-center">
+        Nothing public yet. Follow to get notified when they post.
+      </div>
+      <app-post-card
+        *ngFor="let post of vm.posts"
+        [post]="post"
+        [users]="vm.users">
+      </app-post-card>
+    </section>
+
+    <aside class="space-y-6">
+      <section class="card rounded-2xl p-5">
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-3">Signals</h2>
+        <div class="flex flex-wrap gap-2">
+          <span class="px-3 py-1 rounded-full text-sm bg-blue-50 text-blue-700 border border-blue-100 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-100"
+                *ngFor="let tag of focusTags(vm.profile)">
+            {{ tag }}
+          </span>
+          <span *ngIf="!focusTags(vm.profile).length" class="text-sm text-slate-500 dark:text-slate-400">No tags shared yet.</span>
+        </div>
+      </section>
+
+      <section class="card rounded-2xl p-5">
+        <h2 class="text-base font-semibold text-slate-900 dark:text-white mb-4">Quick stats</h2>
+        <ul class="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+          <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+            <span>Followers</span>
+            <span class="font-semibold text-slate-900 dark:text-white">{{ vm.followers.length }}</span>
+          </li>
+          <li class="flex justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+            <span>Following</span>
+            <span class="font-semibold text-slate-900 dark:text-white">{{ vm.following.length }}</span>
+          </li>
+          <li class="flex justify-between">
+            <span>Posts in feed</span>
+            <span class="font-semibold text-slate-900 dark:text-white">{{ vm.postsCount }}</span>
+          </li>
+        </ul>
+      </section>
+    </aside>
   </main>
-  
+</ng-container>
