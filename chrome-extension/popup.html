@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Post to Berjis</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 8px; width: 320px; }
+      textarea { width: 100%; height: 140px; box-sizing: border-box; }
+      input[type="text"] { width: 100%; box-sizing: border-box; }
+      button { margin-top: 6px; padding: 4px 8px; }
+      .row { display: flex; gap: 6px; margin-top: 6px; }
+      .row button { flex: 1; }
+      .status { margin-top: 6px; font-size: 12px; }
+      .status.error { color: #b91c1c; }
+      .status.ok { color: #15803d; }
+    </style>
+  </head>
+  <body>
+    <h3>Post to Berjis</h3>
+    <label>
+      Content
+      <textarea id="content"></textarea>
+    </label>
+    <label>
+      Optional title
+      <input id="title" type="text" placeholder="Leave empty for tweet-style posts" />
+    </label>
+    <div class="row">
+      <button id="postBtn">Post</button>
+      <button id="loginBtn" type="button">Open Communities</button>
+    </div>
+    <div id="status" class="status"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
+

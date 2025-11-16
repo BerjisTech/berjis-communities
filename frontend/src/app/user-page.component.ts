@@ -220,6 +220,11 @@ export class UserPageComponent implements OnDestroy {
     return mapUsers;
   }
 
+  isOwnProfile(vm: UserVm): boolean {
+    const uid = (vm.profile?.uuid ?? vm.profile?.id ?? '').toString();
+    return !!uid && uid === this.currentUserId;
+  }
+
   displayName(profile: any | null): string {
     if (!profile) return 'Community member';
     return (

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -71,6 +72,12 @@ func New(opts Options) *fiber.App {
 	_ = os.MkdirAll("/data/uploads", 0755)
 	app.Static("/uploads", "/data/uploads")
 
+	// CORS support for extension-origin POSTs
+	app.Options("/v1/posts", func(c *fiber.Ctx) error {
+		allowExtensionOrigin(c)
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+
 	// Public list and get
 	app.Get("/v1/communities", func(c *fiber.Ctx) error { return listCommunities(c, opts.DB) })
 	app.Get("/v1/communities/:id", func(c *fiber.Ctx) error { return getCommunity(c, opts.DB) })
@@ -116,7 +123,10 @@ func New(opts Options) *fiber.App {
 	app.Get("/v1/tags/suggest", func(c *fiber.Ctx) error { return tagsSuggest(c, opts.DB) })
 
 	// Generic posts (standalone or tied to group/community/channel)
-	app.Post("/v1/posts", requireAuth, func(c *fiber.Ctx) error { return createGenericPost(c, opts.DB) })
+	app.Post("/v1/posts", requireAuth, func(c *fiber.Ctx) error {
+		allowExtensionOrigin(c)
+		return createGenericPost(c, opts.DB)
+	})
 	// Stories feed (requires login)
 	app.Get("/v1/stories", requireAuth, func(c *fiber.Ctx) error { return storiesFeed(c, opts.DB) })
 	app.Get("/v1/stories/has", requireAuth, func(c *fiber.Ctx) error { return storiesHas(c, opts.DB) })
@@ -557,15 +567,20 @@ func publicFeed(c *fiber.Ctx, db *sqlx.DB) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
 	}
 	defer rows.Close()
-	items := []map[string]any{}
+	type feedItem struct {
+		Score float64
+		Data  map[string]any
+	}
+	items := []feedItem{}
+	now := time.Now()
 	for rows.Next() {
 		var id sql.NullInt64
 		var userID sql.NullString
 		var title, body, kind sql.NullString
-		var createdAt sql.NullString
+		var createdAtRaw sql.NullTime
 		var communityID, groupID sql.NullInt64
 		var communitySlug, groupSlug sql.NullString
-		_ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAt, &communityID, &communitySlug, &groupID, &groupSlug)
+		_ = rows.Scan(&id, &title, &body, &userID, &kind, &createdAtRaw, &communityID, &communitySlug, &groupID, &groupSlug)
 		// counts
 		var likeCount, reactCount, viewCount, commentCount int64
 		_ = db.Get(&likeCount, "SELECT COUNT(*) FROM post_likes WHERE post_id=$1", id.Int64)
@@ -595,16 +610,35 @@ func publicFeed(c *fiber.Ctx, db *sqlx.DB) error {
 		if mrows != nil {
 			mrows.Close()
 		}
-		items = append(items, fiber.Map{
-			"id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.String, "kind": kind.String, "created_at": createdAt.String,
-			"community_id": communityID.Int64, "community_slug": communitySlug.String,
-			"group_id": groupID.Int64, "group_slug": groupSlug.String,
-			"like_count": likeCount, "reaction_count": reactCount, "view_count": viewCount, "comment_count": commentCount,
-			"reactions": rb,
-			"media":     media,
+		createdAt := now
+		if createdAtRaw.Valid {
+			createdAt = createdAtRaw.Time
+		}
+		score := computeFeedScore(createdAt, likeCount, reactCount, commentCount, viewCount, userID.String)
+		items = append(items, feedItem{
+			Score: score,
+			Data: fiber.Map{
+				"id": id.Int64, "title": title.String, "body": body.String, "user_id": userID.String, "kind": kind.String, "created_at": createdAt.Format(time.RFC3339),
+				"community_id": communityID.Int64, "community_slug": communitySlug.String,
+				"group_id": groupID.Int64, "group_slug": groupSlug.String,
+				"like_count": likeCount, "reaction_count": reactCount, "view_count": viewCount, "comment_count": commentCount,
+				"reactions": rb,
+				"media":     media,
+			},
 		})
 	}
-	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": items})
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Score == items[j].Score {
+			return items[i].Data["id"].(int64) > items[j].Data["id"].(int64)
+		}
+		return items[i].Score > items[j].Score
+	})
+	out := make([]map[string]any, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.Data)
+	}
+	_ = now // reserved for future personalization use
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": out})
 }
 
 func likePost(c *fiber.Ctx, db *sqlx.DB) error {
@@ -680,6 +714,37 @@ func viewPost(c *fiber.Ctx, db *sqlx.DB) error {
 	var n int64
 	_ = db.Get(&n, "SELECT views FROM post_views_agg WHERE post_id=$1", id)
 	return c.JSON(fiber.Map{"success": true, "message": "viewed", "data": fiber.Map{"view_count": n}})
+}
+
+func computeFeedScore(createdAt time.Time, likeCount, reactCount, commentCount, viewCount int64, userID string) float64 {
+	ageHours := time.Since(createdAt).Hours()
+	if ageHours < 0 {
+		ageHours = 0
+	}
+	engagement := float64(likeCount)*2.0 + float64(reactCount)*1.5 + float64(commentCount)*3.0 + float64(viewCount)*0.05
+	recencyBoost := 1.0 / (1.0 + ageHours/12.0)
+	raw := engagement + recencyBoost*5.0
+	decay := 1.0 / (1.0 + ageHours/48.0)
+	score := raw * decay
+	if strings.TrimSpace(userID) == "" {
+		score *= 0.5
+	}
+	return score
+}
+
+func allowExtensionOrigin(c *fiber.Ctx) {
+	origin := strings.TrimSpace(c.Get("Origin"))
+	if strings.HasPrefix(origin, "chrome-extension://") {
+		c.Set("Access-Control-Allow-Origin", origin)
+		c.Set("Vary", "Origin")
+		c.Set("Access-Control-Allow-Credentials", "true")
+		c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+		reqHdrs := strings.TrimSpace(c.Get("Access-Control-Request-Headers"))
+		if reqHdrs == "" {
+			reqHdrs = "Authorization,Content-Type,Accept"
+		}
+		c.Set("Access-Control-Allow-Headers", reqHdrs)
+	}
 }
 
 func listComments(c *fiber.Ctx, db *sqlx.DB) error {
@@ -833,8 +898,8 @@ func resolveUsername(c *fiber.Ctx, coreAPIBase string) error {
 	if username == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"success": false, "message": "username required"})
 	}
-	// Call core API search
-	req, err := http.NewRequest("GET", strings.TrimRight(coreAPIBase, "/")+"/v1/users/search?q="+urlQueryEscape(username), nil)
+	// Call core API public by-username endpoint
+	req, err := http.NewRequest("GET", strings.TrimRight(coreAPIBase, "/")+"/v1/users/public/by-username/"+urlQueryEscape(username), nil)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "proxy error"})
 	}
@@ -860,28 +925,10 @@ func resolveUsername(c *fiber.Ctx, coreAPIBase string) error {
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "invalid core response"})
 	}
-	arr, _ := raw["data"].([]any)
-	best := map[string]any{}
-	unameLower := strings.ToLower(username)
-	for _, v := range arr {
-		item, _ := v.(map[string]any)
-		if item == nil {
-			continue
-		}
-		u1, _ := item["username"].(string)
-		u2, _ := item["handle"].(string)
-		if strings.ToLower(u1) == unameLower || strings.ToLower(u2) == unameLower {
-			best = item
-			break
-		}
-		if len(best) == 0 {
-			best = item
-		}
-	}
-	if len(best) == 0 {
+	if raw["data"] == nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
-	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": best})
+	return c.JSON(fiber.Map{"success": true, "message": "ok", "data": raw["data"]})
 }
 
 // Follow current->target

@@ -293,6 +293,14 @@ function applyInlineFormatting(text: string): string {
   return s;
 }
 
+function linkUrls(text: string): string {
+  const urlRegex = /https?:\/\/[^\s<]+/g;
+  return (text || '').replace(urlRegex, (url) => {
+    const safe = url.replace(/"/g, '&quot;');
+    return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${safe}</a>`;
+  });
+}
+
 function linkHashtags(text: string): string {
   return (text || '').replace(/(^|\s)#(\w+)/g, (_m, p1, tag) => `${p1}<a href="/explore?tag=${encodeURIComponent(tag)}">#${tag}</a>`);
 }
@@ -389,5 +397,6 @@ export function formatPostContent(raw: string): string {
   result = replaceEmojiShortcodes(result);
   result = linkMentions(result);
   result = linkHashtags(result);
+  result = linkUrls(result);
   return result;
 }
