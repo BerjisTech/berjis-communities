@@ -43,15 +43,25 @@
   <div class="font-semibold" *ngIf="post.title" [innerText]="post.title"></div>
   <div [innerHTML]="render(post.body)"></div>
 
-  <div *ngIf="hasMedia" class="mt-2 grid gap-1"
+  <div *ngIf="hasMedia" class="mt-2 grid gap-1 auto-rows-[300px]"
        [ngClass]="{'grid-cols-2': (post.media || []).length > 1, 'grid-cols-1': (post.media || []).length === 1}">
     <ng-container *ngFor="let media of post.media; let i = index">
       <ng-container *ngIf="i < 4">
-        <div class="relative">
-          <img *ngIf="media.kind !== 'video'" [src]="media.url" class="w-full h-48 object-cover rounded" (click)="openViewer()" />
-          <video *ngIf="media.kind === 'video'" [src]="media.url" class="w-full h-48 object-cover rounded" controls></video>
+        <div class="relative overflow-hidden rounded bg-slate-900/70 bg-center bg-cover flex items-center justify-center"
+             [style.background-image]="'url(' + media.url + ')'"
+             (click)="openViewer()">
+          <div class="absolute inset-0 bg-gradient-to-br from-slate-950/80 via-slate-900/60 to-slate-950/80 backdrop-blur-md"></div>
+          <ng-container *ngIf="media.kind !== 'video'; else videoThumb">
+            <img [src]="media.url"
+                 class="relative z-10 w-auto h-auto max-w-full max-h-full object-contain" />
+          </ng-container>
+          <ng-template #videoThumb>
+            <video [src]="media.url"
+                   class="relative z-10 w-auto h-auto max-w-full max-h-full object-contain"
+                   muted playsinline></video>
+          </ng-template>
           <div *ngIf="i === 3 && (post.media.length > 4)"
-               class="absolute inset-0 bg-black/40 text-white flex items-center justify-center text-xl font-semibold rounded">
+               class="absolute inset-0 bg-black/40 text-white flex items-center justify-center text-xl font-semibold rounded z-20">
             +{{ post.media.length - 4 }}
           </div>
         </div>

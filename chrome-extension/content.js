@@ -247,7 +247,11 @@ function enhanceReddit() {
         if (externalHref) {
           body += '\nSource: ' + externalHref;
         }
-        const mediaEls = post.querySelectorAll('img, video, video source');
+        const mediaRoot =
+          rootPost.querySelector('[slot="post-media-container"]') ||
+          rootPost.querySelector('[slot="thumbnail"]') ||
+          post.querySelector('[data-click-id="media"]');
+        const mediaEls = mediaRoot ? mediaRoot.querySelectorAll('img, video, video source') : [];
         const urls = new Set();
         const media = [];
         mediaEls.forEach((el) => {
@@ -322,6 +326,80 @@ function enhanceLinkedIn() {
   scan();
 }
 
+// Facebook (best-effort)
+function enhanceFacebook() {
+  const host = location.hostname.toLowerCase();
+  if (!host.includes('facebook.com')) return;
+
+  const scan = () => {
+    const posts = document.querySelectorAll('div[role="article"]');
+    posts.forEach((post) => {
+      // Try to find the main post action bar, not per-comment toolbars
+      let footer = null;
+      const groups = post.querySelectorAll('div[role="group"]');
+      for (const g of groups) {
+        const text = (g.innerText || '').toLowerCase();
+        // Heuristic: action bar usually contains Like/Comment/Share
+        if (text.includes('like') || text.includes('comment') || text.includes('share')) {
+          footer = g;
+          break;
+        }
+      }
+      if (!footer) {
+        footer =
+          post.querySelector('[aria-label][role="group"]') ||
+          post;
+      }
+      ensureShareButton(footer, async () => {
+        let body = '';
+        const story = post.querySelector('div[dir="auto"] span');
+        if (story) {
+          const clone = story.closest('div[dir="auto"]')?.cloneNode(true) || story.cloneNode(true);
+          clone.querySelectorAll('img').forEach((img) => {
+            const alt = img.getAttribute('alt') || '';
+            const textNode = document.createTextNode(alt);
+            img.replaceWith(textNode);
+          });
+          body = clone.innerText.trim();
+        } else {
+          body = post.innerText.trim();
+        }
+        if (!body) {
+          body = document.title || 'Shared from Facebook';
+        }
+        const url = location.href;
+        if (url) {
+          body += '\n\n— Shared from ' + url;
+        }
+        const mediaEls = post.querySelectorAll('img, video, video source');
+        const urls = new Set();
+        const media = [];
+        mediaEls.forEach((el) => {
+          const tag = el.tagName.toLowerCase();
+          let src = el.getAttribute('src') || '';
+          if (!src) return;
+          if (isBlobUrl(src)) return;
+          if (tag === 'img' && isEmojiImage(el, src)) return;
+          const cls = (el.className || '').toString().toLowerCase();
+          if (cls.includes('avatar') || cls.includes('profile') || cls.includes('reaction')) {
+            return;
+          }
+          src = fullUrl(src);
+          if (urls.has(src)) return;
+          urls.add(src);
+          media.push({ url: src, kind: inferMediaKind(src) });
+        });
+        await postToBerjis({ title: '', body, media });
+      });
+    });
+  };
+
+  const observer = new MutationObserver(() => scan());
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  scan();
+}
+
 enhanceTwitter();
 enhanceReddit();
 enhanceLinkedIn();
+enhanceFacebook();

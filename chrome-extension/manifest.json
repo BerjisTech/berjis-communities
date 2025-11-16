@@ -22,7 +22,9 @@
         "https://x.com/*",
         "https://www.reddit.com/*",
         "https://old.reddit.com/*",
-        "https://www.linkedin.com/*"
+        "https://www.linkedin.com/*",
+        "https://www.facebook.com/*",
+        "https://web.facebook.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
