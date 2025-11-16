@@ -3,9 +3,13 @@
   <h1 class="m-0 text-xl font-semibold">Groups</h1>
 </header>
 <main class="max-w-4xl mx-auto p-6">
-  <div *ngIf="loading">Loading…</div>
-  <a [href]="'/g/'+g.slug" *ngFor="let g of items" class="block my-2 p-3 rounded bg-radial-[at_0%_100%] from-blue-50 to-slate-50 dark:from-blue-950 dark:to-slate-900 shadow shadow-blue-100 dark:shadow-blue-900">
-    <strong class="text-blue-900 dark:text-blue-50">/g/{{g.slug}}</strong>
-    <div class="text-slate-900 dark:text-slate-50">{{g.description}}</div>
+  <div *ngIf="loading" class="py-6 text-center text-slate-500 dark:text-slate-300">Loading.</div>
+  <a
+    [href]="'/g/' + g.slug"
+    *ngFor="let g of visible"
+    class="block my-2 p-3 rounded bg-radial-[at_0%_100%] from-blue-50 to-slate-50 dark:from-blue-950 dark:to-slate-900 shadow shadow-blue-100 dark:shadow-blue-900">
+    <strong class="text-blue-900 dark:text-blue-50">/g/{{ g.slug }}</strong>
+    <div class="text-slate-900 dark:text-slate-50">{{ g.description }}</div>
   </a>
+  <div #groupsSentinel class="w-full h-1"></div>
 </main>

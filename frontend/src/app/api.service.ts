@@ -62,8 +62,15 @@ export class ApiService {
     return this.withRetry<T>(() => this.http.delete<T>(url, o));
   }
 
-  feedPublic(limit = 50) {
-    return this.get<{ success: boolean; data: any[]; message: string }>(`${this.svcBase()}/v1/feed/public?limit=${limit}`);
+  feedPublic(limit = 50, opts?: { before?: number | null; community?: string; group?: string }) {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (opts?.before) params.set('before', String(opts.before));
+    if (opts?.community) params.set('community', opts.community);
+    if (opts?.group) params.set('group', opts.group);
+    const query = params.toString();
+    const url = query ? `${this.svcBase()}/v1/feed/public?${query}` : `${this.svcBase()}/v1/feed/public`;
+    return this.get<{ success: boolean; data: any[]; message: string }>(url);
   }
 
   explore(tag: string) {

@@ -148,11 +148,8 @@ export class CommunityPageComponent {
             map((res) => res.data || []),
             catchError(() => of([]))
           ),
-          posts: this.api.feedPublic(150).pipe(
-            map((feed) => {
-              const items = feed.data || [];
-              return items.filter((post: any) => post.community_slug === community.slug);
-            }),
+          posts: this.api.feedPublic(60, { community: community.slug }).pipe(
+            map((feed) => feed.data || []),
             catchError(() => of([]))
           ),
         }).pipe(

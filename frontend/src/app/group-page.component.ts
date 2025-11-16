@@ -87,11 +87,8 @@ export class GroupPageComponent {
         if (!group) {
           return of({ loading: false, error: 'Group not found.', group: null, posts: [], users: {} });
         }
-        return this.api.feedPublic(120).pipe(
-          map((feed) => {
-            const items = feed.data || [];
-            return items.filter((post: any) => post.group_slug === group.slug);
-          }),
+        return this.api.feedPublic(60, { group: group.slug }).pipe(
+          map((feed) => feed.data || []),
           switchMap((posts) => this.hydrateUsers(posts).pipe(map((users) => ({ loading: false, error: '', group, posts, users })))),
           catchError(() => of({ loading: false, error: '', group, posts: [], users: {} }))
         );

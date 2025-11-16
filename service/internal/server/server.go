@@ -3,6 +3,7 @@ package server
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -514,24 +515,44 @@ func publicFeed(c *fiber.Ctx, db *sqlx.DB) error {
 			limit = n
 		}
 	}
-	q := `
+	whereParts := []string{
+		"(p.expires_at IS NULL OR now() <= p.expires_at)",
+		"p.visibility = 'public'",
+		"(p.kind IN ('post','repost','quote','story'))",
+		`(
+              (p.community_id IS NULL AND p.group_id IS NULL)
+           OR (p.community_id IS NOT NULL AND c.visibility = 'public')
+           OR (p.group_id IS NOT NULL AND g.visibility = 'public')
+        )`,
+	}
+	args := []any{}
+	if beforeStr := strings.TrimSpace(c.Query("before")); beforeStr != "" {
+		if beforeVal, err := strconv.ParseInt(beforeStr, 10, 64); err == nil && beforeVal > 0 {
+			whereParts = append(whereParts, fmt.Sprintf("p.id < $%d", len(args)+1))
+			args = append(args, beforeVal)
+		}
+	}
+	if communitySlug := strings.TrimSpace(c.Query("community")); communitySlug != "" {
+		whereParts = append(whereParts, fmt.Sprintf("c.slug = $%d", len(args)+1))
+		args = append(args, communitySlug)
+	}
+	if groupSlug := strings.TrimSpace(c.Query("group")); groupSlug != "" {
+		whereParts = append(whereParts, fmt.Sprintf("g.slug = $%d", len(args)+1))
+		args = append(args, groupSlug)
+	}
+	whereSQL := strings.Join(whereParts, " AND ")
+	query := fmt.Sprintf(`
       SELECT p.id, p.title, p.body, p.user_id, p.kind, p.created_at,
              p.community_id, c.slug as community_slug,
              p.group_id, g.slug as group_slug
       FROM posts p
       LEFT JOIN communities c ON c.id = p.community_id
       LEFT JOIN groups g ON g.id = p.group_id
-      WHERE (p.expires_at IS NULL OR now() <= p.expires_at)
-        AND p.visibility = 'public'
-        AND (p.kind IN ('post','repost','quote','story'))
-        AND (
-              (p.community_id IS NULL AND p.group_id IS NULL)
-           OR (p.community_id IS NOT NULL AND c.visibility = 'public')
-           OR (p.group_id IS NOT NULL AND g.visibility = 'public')
-        )
+      WHERE %s
       ORDER BY p.id DESC
-      LIMIT $1`
-	rows, err := db.Queryx(q, limit)
+      LIMIT $%d`, whereSQL, len(args)+1)
+	args = append(args, limit)
+	rows, err := db.Queryx(query, args...)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "db error"})
 	}
