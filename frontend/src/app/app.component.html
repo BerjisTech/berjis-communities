@@ -1,111 +1,148 @@
-<div class="min-h-screen flex flex-col bg-radial-[at_100%_0%] from-blue-50 to-slate-50 dark:from-blue-900 dark:to-slate-900">
+<div
+  class="min-h-screen flex flex-col bg-radial-[at_100%_0%] from-blue-50 to-slate-50 dark:from-blue-900 dark:to-slate-900">
+  <!-- Global theme toggle (kept for desktop) -->
   <button type="button" (click)="toggleTheme()"
-          class="fixed top-4 right-4 z-50 rounded-full p-3 backdrop-blur shadow-brand bg-white/80 text-blue-900 hover:bg-white dark:bg-slate-800/80 dark:text-[color:var(--color-gold)]"
-          aria-label="Toggle theme">
+    class="hidden lg:flex fixed top-4 right-4 z-50 rounded-full p-3 backdrop-blur shadow-brand bg-white/80 text-blue-900 hover:bg-white dark:bg-slate-800/80 dark:text-[color:var(--color-gold)]"
+    aria-label="Toggle theme">
     <span class="material-symbols-outlined align-middle">{{ isDark ? 'light_mode' : 'dark_mode' }}</span>
   </button>
-  <div class="grid grid-cols-4 h-screen w-full overflow-hidden p-0 m-0">
-  <div #leftSideBar class="col-span-1 h-screen overflow-y-auto overflow-x-hidden">
-    <div #userAvatar class="h-[200px] flex items-center justify-center" *ngIf="currentUser">
-      <app-user-avatar [id]="currentUser?.id || currentUser?.uuid" [src]="userAvatar" [size]="150"></app-user-avatar>
-    </div>
-    <div class="flex items-center justify-center gap-6 py-2" *ngIf="currentUser">
-      <button class="text-center" (click)="openFollowers()">
-        <div class="text-lg font-bold">{{ followerCount }}</div>
-        <div class="text-xs uppercase tracking-wide text-slate-500">Followers</div>
-      </button>
-      <button class="text-center" (click)="openFollowing()">
-        <div class="text-lg font-bold">{{ followingCount }}</div>
-        <div class="text-xs uppercase tracking-wide text-slate-500">Following</div>
-      </button>
-      <a class="text-center" routerLink="/me/posts">
-        <div class="text-lg font-bold">{{ postsCount }}</div>
-        <div class="text-xs uppercase tracking-wide text-slate-500">Posts</div>
-      </a>
-    </div>
-    <div #userName class="flex flex-col items-center justify-center text-center" *ngIf="currentUser">
-      <span class="font-black text-xl">{{ userDisplayName }}</span>
-      <span class="font-light text-slate-600" *ngIf="userHandle">{{ userHandle }}</span>
-    </div>
-    <a *ngIf="!currentUser" href="http://berjis.tech/account"
-      class="rounded-lg p-3 my-2 flex items-center justify-center gap-2 w-[300px] mx-auto bg-blue-900 text-white">
-      <span class="material-symbols-outlined">login</span>
-      <span>Sign In</span>
-    </a>
-    <div #navLinksRef
-      class="h-[calc(100vh-650px)] !min-h-[320px] w-[300px] mx-auto overflow-y-auto overflow-x-hidden flex flex-col px-2">
 
-      <a [routerLink]="link.url" *ngFor="let link of navLinks"
-        class="rounded-lg p-3 flex items-center justify-start gap-2 w-full"
-        routerLinkActive="!bg-slate-800 !text-slate-100"
-        [routerLinkActiveOptions]="link.url === '/' ? { exact: true } : { exact: false }">
-        <span class="material-symbols-outlined">{{link.icon}}</span>
-        <span>{{link.name}}</span>
-      </a>
-    </div>
-    <div #ads class="mx-auto w-[250px] flex items-center justify-center h-[250px]">
-      <div class="relative w-full h-full border-[2px] border-dashed border-orange-400 rounded-md">
-        <div
-          class="w-[100px] h-[100px] absolute bottom-[-25px] left-[-25px] shadow bg-gradient-to-tl from-teal-400 to-cyan-300 rounded-full">
-        </div>
-        <div
-          class="w-[100px] h-[100px] absolute top-[-20px] right-[-20px] shadow bg-gradient-to-r from-rose-400 to-orange-300 rounded-full">
-        </div>
-        <div class="w-[150px] h-[150px] absolute top-[50px] right-[50px] rounded-xl shadow bg-green-200"></div>
-        <div
-          class="w-[50px] h-[50px] absolute top-[25px] left-[25px] shadow bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full">
-        </div>
-        <div
-          class="w-[50px] h-[50px] absolute bottom-[25px] right-[25px] shadow bg-gradient-to-t from-green-400 to-emerald-300 rounded-full">
-        </div>
-      </div>
-    </div>
-  </div>
-  <div #mainContent class="col-span-2 h-screen overflow-y-auto overflow-x-hidden">
-    <router-outlet></router-outlet>
-  </div>
-  <div #rightSideBar class="col-span-1 h-screen overflow-y-auto overflow-x-hidden">
-    <div #stories *ngIf="currentUser" class="px-2 py-2">
-      <app-story-strip [me]="currentUser"></app-story-strip>
-    </div>
-    <div #suggestions></div>
-    <div #recommendations></div>
+  <!-- Mobile top bar -->
+  <header
+    class="lg:hidden h-[50px] flex items-center justify-between px-4 py-3 gap-3 bg-white/90 dark:bg-slate-900/90 shadow-sm z-30">
     <div class="flex items-center gap-2">
-      <a href="http://berjis.tech/account"
-        class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur hover:bg-gray-100 dark:bg-slate-800 dark:text-white">Account</a>
-      <button (click)="toggleTheme()" title="Toggle theme"
-        class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur dark:bg-slate-800 dark:text-white">
-        {{ isDark ? 'Light' : 'Dark' }}
+      <span
+        class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-900 text-white font-black text-sm">
+        B
+      </span>
+      <div class="flex flex-col leading-tight">
+        <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">Berjis Communities</span>
+        <span class="text-[11px] text-slate-500 dark:text-slate-400">Stay in the loop</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button"
+        class="inline-flex items-center justify-center h-8 w-8 rounded-full border border-slate-300 bg-white/90 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+        (click)="toggleTheme()" aria-label="Toggle theme">
+        <span class="material-symbols-outlined text-[18px]">{{ isDark ? 'light_mode' : 'dark_mode' }}</span>
       </button>
     </div>
-  </div>
-</div>
+  </header>
 
-<!-- Followers/Following Modal -->
-<div *ngIf="showFollowers || showFollowing" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-  <div class="bg-white dark:bg-slate-900 w-[480px] max-h-[80vh] rounded-lg shadow-xl overflow-hidden">
-    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-      <div class="font-semibold">{{ showFollowers ? 'Followers' : 'Following' }}</div>
-      <button class="text-slate-500" (click)="closeModals()">✕</button>
-    </div>
-    <div class="overflow-y-auto max-h-[70vh]">
-      <div *ngFor="let id of (showFollowers ? followers : following)"
-        class="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-        <div class="flex items-center gap-3">
-          <img [src]="userAvatarById(id)" class="w-8 h-8 rounded-full" />
-          <div class="text-sm">{{ userName(id) }}</div>
-        </div>
-        <div class="flex items-center gap-2">
-          <button *ngIf="showFollowers" class="text-xs px-2 py-1 rounded border"
-            (click)="removeFollower(id)">Remove</button>
-          <button class="text-xs px-2 py-1 rounded"
-            [ngClass]="isFollowing(id) ? 'bg-slate-200 dark:bg-slate-700' : 'bg-blue-600 text-white'"
-            (click)="toggleFollow(id)">
-            {{ isFollowing(id) ? 'Following' : 'Follow' }}
-          </button>
+  <div class="grid grid-cols-1 lg:grid-cols-4 h-screen w-full overflow-hidden p-0 m-0">
+    <div #leftSideBar class="hidden lg:block col-span-1 h-screen overflow-y-auto overflow-x-hidden">
+      <div #userAvatar class="h-[200px] flex items-center justify-center" *ngIf="currentUser">
+        <app-user-avatar [id]="currentUser?.id || currentUser?.uuid" [src]="userAvatar" [size]="150"></app-user-avatar>
+      </div>
+      <div class="flex items-center justify-center gap-6 py-2" *ngIf="currentUser">
+        <button class="text-center" (click)="openFollowers()">
+          <div class="text-lg font-bold">{{ followerCount }}</div>
+          <div class="text-xs uppercase tracking-wide text-slate-500">Followers</div>
+        </button>
+        <button class="text-center" (click)="openFollowing()">
+          <div class="text-lg font-bold">{{ followingCount }}</div>
+          <div class="text-xs uppercase tracking-wide text-slate-500">Following</div>
+        </button>
+        <a class="text-center" routerLink="/me/posts">
+          <div class="text-lg font-bold">{{ postsCount }}</div>
+          <div class="text-xs uppercase tracking-wide text-slate-500">Posts</div>
+        </a>
+      </div>
+      <div #userName class="flex flex-col items-center justify-center text-center" *ngIf="currentUser">
+        <span class="font-black text-xl">{{ userDisplayName }}</span>
+        <span class="font-light text-slate-600" *ngIf="userHandle">{{ userHandle }}</span>
+      </div>
+      <a *ngIf="!currentUser" href="http://berjis.tech/account"
+        class="rounded-lg p-3 my-2 flex items-center justify-center gap-2 w-[300px] mx-auto bg-blue-900 text-white">
+        <span class="material-symbols-outlined">login</span>
+        <span>Sign In</span>
+      </a>
+      <div #navLinksRef
+        class="h-[calc(100vh-650px)] !min-h-[320px] w-[300px] mx-auto overflow-y-auto overflow-x-hidden flex flex-col px-2">
+
+        <a [routerLink]="link.url" *ngFor="let link of navLinks"
+          class="rounded-lg p-3 flex items-center justify-start gap-2 w-full"
+          routerLinkActive="!bg-slate-800 !text-slate-100"
+          [routerLinkActiveOptions]="link.url === '/' ? { exact: true } : { exact: false }">
+          <span class="material-symbols-outlined">{{link.icon}}</span>
+          <span>{{link.name}}</span>
+        </a>
+      </div>
+      <div #ads class="mx-auto w-[250px] flex items-center justify-center h-[250px]">
+        <div class="relative w-full h-full border-[2px] border-dashed border-orange-400 rounded-md">
+          <div
+            class="w-[100px] h-[100px] absolute bottom-[-25px] left-[-25px] shadow bg-gradient-to-tl from-teal-400 to-cyan-300 rounded-full">
+          </div>
+          <div
+            class="w-[100px] h-[100px] absolute top-[-20px] right-[-20px] shadow bg-gradient-to-r from-rose-400 to-orange-300 rounded-full">
+          </div>
+          <div class="w-[150px] h-[150px] absolute top-[50px] right-[50px] rounded-xl shadow bg-green-200"></div>
+          <div
+            class="w-[50px] h-[50px] absolute top-[25px] left-[25px] shadow bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full">
+          </div>
+          <div
+            class="w-[50px] h-[50px] absolute bottom-[25px] right-[25px] shadow bg-gradient-to-t from-green-400 to-emerald-300 rounded-full">
+          </div>
         </div>
       </div>
     </div>
+    <div #mainContent class="col-span-1 lg:col-span-2 h-[calc(100vh-101px)] lg:h-screen overflow-y-auto overflow-x-hidden pb-16 lg:pb-0">
+      <router-outlet></router-outlet>
+    </div>
+    <div #rightSideBar class="hidden lg:block col-span-1 h-screen overflow-y-auto overflow-x-hidden">
+      <div #stories *ngIf="currentUser" class="px-2 py-2">
+        <app-story-strip [me]="currentUser"></app-story-strip>
+      </div>
+      <div #suggestions></div>
+      <div #recommendations></div>
+      <div class="hidden lg:flex items-center gap-2">
+        <a href="http://berjis.tech/account"
+          class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur hover:bg-gray-100 dark:bg-slate-800 dark:text-white">Account</a>
+        <button (click)="toggleTheme()" title="Toggle theme"
+          class="px-3 py-2 rounded-md border border-gray-300 bg-white/90 backdrop-blur dark:bg-slate-800 dark:text-white">
+          {{ isDark ? 'Light' : 'Dark' }}
+        </button>
+      </div>
+    </div>
   </div>
+
+  <!-- Mobile bottom nav -->
+  <nav
+    class="lg:hidden h-[50px] fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/80 bg-white/90 dark:border-slate-700/80 dark:bg-slate-900/95 backdrop-blur">
+    <div class="flex justify-around items-center px-1 py-1.5">
+      <a *ngFor="let link of navLinks" [routerLink]="link.url" routerLinkActive="text-blue-600 dark:text-blue-300"
+        class="flex flex-col items-center justify-center px-2 py-1 text-[11px] text-slate-600 dark:text-slate-300">
+        <span class="material-symbols-outlined text-[20px] mb-0.5">{{ link.icon }}</span>
+        <span class="truncate max-w-16">{{ link.name }}</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- Followers/Following Modal -->
+  <div *ngIf="showFollowers || showFollowing" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-slate-900 w-[480px] max-h-[80vh] rounded-lg shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+        <div class="font-semibold">{{ showFollowers ? 'Followers' : 'Following' }}</div>
+        <button class="text-slate-500" (click)="closeModals()">✕</button>
+      </div>
+      <div class="overflow-y-auto max-h-[70vh]">
+        <div *ngFor="let id of (showFollowers ? followers : following)"
+          class="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-3">
+            <img [src]="userAvatarById(id)" class="w-8 h-8 rounded-full" />
+            <div class="text-sm">{{ userName(id) }}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button *ngIf="showFollowers" class="text-xs px-2 py-1 rounded border"
+              (click)="removeFollower(id)">Remove</button>
+            <button class="text-xs px-2 py-1 rounded"
+              [ngClass]="isFollowing(id) ? 'bg-slate-200 dark:bg-slate-700' : 'bg-blue-600 text-white'"
+              (click)="toggleFollow(id)">
+              {{ isFollowing(id) ? 'Following' : 'Follow' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>

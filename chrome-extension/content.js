@@ -27,8 +27,8 @@ function isEmojiImage(el, src) {
 }
 
 function ensureShareButton(container, onClick) {
-  if (!container || container.dataset.berjisHasButton === '1') return;
-  container.dataset.berjisHasButton = '1';
+  if (!container) return;
+  if (container.querySelector('.berjis-post-btn')) return;
 
   const btn = document.createElement('button');
   btn.textContent = 'Post to Berjis';
@@ -42,6 +42,7 @@ function ensureShareButton(container, onClick) {
   btn.style.marginTop = '4px';
   btn.style.float = 'right';
   btn.style.clear = 'both';
+  btn.className = (btn.className + ' berjis-post-btn').trim();
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     e.preventDefault();
