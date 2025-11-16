@@ -6,6 +6,10 @@ function inferMediaKind(url) {
   return 'image';
 }
 
+function isBlobUrl(src) {
+  return (src || '').startsWith('blob:');
+}
+
 function isEmojiImage(el, src) {
   const alt = (el.getAttribute('alt') || '').trim();
   if (alt && alt.length <= 3) {
@@ -155,7 +159,18 @@ function enhanceTwitter() {
       const footer = article.querySelector('div[role="group"]') || article;
       ensureShareButton(footer, async () => {
         const textEl = article.querySelector('div[data-testid="tweetText"]');
-        let body = textEl ? textEl.innerText.trim() : article.innerText.trim();
+        let body = '';
+        if (textEl) {
+          const clone = textEl.cloneNode(true);
+          clone.querySelectorAll('img').forEach((img) => {
+            const alt = img.getAttribute('alt') || '';
+            const textNode = document.createTextNode(alt);
+            img.replaceWith(textNode);
+          });
+          body = clone.innerText.trim();
+        } else {
+          body = article.innerText.trim();
+        }
         if (!body) {
           body = document.title || 'Shared from Twitter';
         }
@@ -164,14 +179,19 @@ function enhanceTwitter() {
         if (url) {
           body += '\n\n— Shared from ' + url;
         }
-        const mediaEls = article.querySelectorAll('img, video, video source');
+        const mediaEls = article.querySelectorAll(
+          'div[data-testid="tweetPhoto"] img, div[data-testid="videoPlayer"] video, div[data-testid="videoPlayer"] source'
+        );
         const urls = new Set();
         const media = [];
         mediaEls.forEach((el) => {
           const tag = el.tagName.toLowerCase();
           let src = el.getAttribute('src') || '';
           if (!src) return;
+          if (isBlobUrl(src)) return;
           if (tag === 'img' && isEmojiImage(el, src)) return;
+          const avatarAncestor = el.closest('div[data-testid="User-Avatar"]');
+          if (avatarAncestor) return;
           src = fullUrl(src);
           if (urls.has(src)) return;
           urls.add(src);
@@ -201,6 +221,7 @@ function enhanceReddit() {
         post.querySelector('div[data-test-id="post-content"]') ||
         post;
       ensureShareButton(footer, async () => {
+        const rootPost = post.closest('shreddit-post') || post;
         const titleEl =
           post.querySelector('h1') ||
           post.querySelector('h2') ||
@@ -222,6 +243,10 @@ function enhanceReddit() {
         if (url) {
           body += '\n\n— Shared from ' + url;
         }
+        const externalHref = rootPost && rootPost.getAttribute('content-href');
+        if (externalHref) {
+          body += '\nSource: ' + externalHref;
+        }
         const mediaEls = post.querySelectorAll('img, video, video source');
         const urls = new Set();
         const media = [];
@@ -233,7 +258,13 @@ function enhanceReddit() {
             src = srcset.split(' ')[0];
           }
           if (!src) return;
+          if (isBlobUrl(src)) return;
           if (tag === 'img' && isEmojiImage(el, src)) return;
+          const cls = (el.className || '').toString().toLowerCase();
+          const avatarAncestor = el.closest('.avatar');
+          if (avatarAncestor || cls.includes('avatar') || cls.includes('shreddit-subreddit-icon__icon')) {
+            return;
+          }
           src = fullUrl(src);
           if (urls.has(src)) return;
           urls.add(src);
@@ -274,6 +305,7 @@ function enhanceLinkedIn() {
           const tag = el.tagName.toLowerCase();
           let src = el.getAttribute('src') || '';
           if (!src) return;
+          if (isBlobUrl(src)) return;
           if (tag === 'img' && isEmojiImage(el, src)) return;
           src = fullUrl(src);
           if (urls.has(src)) return;

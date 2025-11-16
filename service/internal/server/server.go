@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -512,6 +513,10 @@ func createGenericPost(c *fiber.Ctx, db *sqlx.DB) error {
 		}
 	}
 
+	if len(body.Media) == 0 {
+		_ = enrichExternalMedia(tx, id, body.Body)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "message": "commit failed"})
 	}
@@ -745,6 +750,115 @@ func allowExtensionOrigin(c *fiber.Ctx) {
 		}
 		c.Set("Access-Control-Allow-Headers", reqHdrs)
 	}
+}
+
+func enrichExternalMedia(tx *sqlx.Tx, postID int64, bodyText string) error {
+	text := strings.TrimSpace(bodyText)
+	if text == "" {
+		return nil
+	}
+	// Twitter / X
+	if statusURL := extractTwitterStatusURL(text); statusURL != "" {
+		if videoURL, err := fetchTwitterVideoURL(statusURL); err == nil && videoURL != "" {
+			_, _ = tx.Exec("INSERT INTO posts_media(post_id, url, kind, position) VALUES ($1,$2,'video',0) ON CONFLICT DO NOTHING", postID, videoURL)
+		}
+	}
+	// Streamable (common on Reddit)
+	if streamURL := extractStreamableURL(text); streamURL != "" {
+		if videoURL, err := fetchStreamableVideoURL(streamURL); err == nil && videoURL != "" {
+			_, _ = tx.Exec("INSERT INTO posts_media(post_id, url, kind, position) VALUES ($1,$2,'video',0) ON CONFLICT DO NOTHING", postID, videoURL)
+		}
+	}
+	return nil
+}
+
+func extractTwitterStatusURL(text string) string {
+	re := regexp.MustCompile(`https?://(?:x\.com|twitter\.com)/[A-Za-z0-9_]+/status/\d+`)
+	m := re.FindString(text)
+	return strings.TrimSpace(m)
+}
+
+func extractStreamableURL(text string) string {
+	re := regexp.MustCompile(`https?://(?:www\.)?streamable\.com/[A-Za-z0-9]+`)
+	m := re.FindString(text)
+	return strings.TrimSpace(m)
+}
+
+func fetchTwitterVideoURL(statusURL string) (string, error) {
+	client := &http.Client{Timeout: 8 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, statusURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; BerjisCommunitiesBot/1.0)")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return "", err
+	}
+	html := string(data)
+	url := findTwitterVideoURL(html)
+	return url, nil
+}
+
+func findTwitterVideoURL(html string) string {
+	// Look for escaped video URLs first
+	reEscaped := regexp.MustCompile(`https:\\/\\/video\.twimg\.com\\/[^"']+`)
+	if m := reEscaped.FindString(html); m != "" {
+		u := strings.ReplaceAll(m, `\/`, `/`)
+		u = strings.ReplaceAll(u, `\u0026`, `&`)
+		return u
+	}
+	rePlain := regexp.MustCompile(`https://video\.twimg\.com/[^"']+`)
+	if m := rePlain.FindString(html); m != "" {
+		return m
+	}
+	return ""
+}
+
+func fetchStreamableVideoURL(pageURL string) (string, error) {
+	client := &http.Client{Timeout: 8 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, pageURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; BerjisCommunitiesBot/1.0)")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return "", err
+	}
+	html := string(data)
+	url := findStreamableVideoURL(html)
+	return url, nil
+}
+
+func findStreamableVideoURL(html string) string {
+	reEscaped := regexp.MustCompile(`https:\\/\\/cdn\.streamable\.com\\/[^"']+`)
+	if m := reEscaped.FindString(html); m != "" {
+		u := strings.ReplaceAll(m, `\/`, `/`)
+		u = strings.ReplaceAll(u, `\u0026`, `&`)
+		return u
+	}
+	rePlain := regexp.MustCompile(`https://cdn\.streamable\.com/[^"']+`)
+	if m := rePlain.FindString(html); m != "" {
+		return m
+	}
+	return ""
 }
 
 func listComments(c *fiber.Ctx, db *sqlx.DB) error {
