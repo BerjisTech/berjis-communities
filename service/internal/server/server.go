@@ -16,8 +16,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
@@ -58,6 +60,11 @@ func New(opts Options) *fiber.App {
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		AllowHeaders:     "Authorization,Content-Type,Accept",
 		AllowCredentials: true,
+	}))
+	app.Use(limiter.New(limiter.Config{
+		Max:               60,
+		Expiration:        1 * time.Minute,
+		LimiterMiddleware: limiter.SlidingWindow{},
 	}))
 
 	// Health
@@ -185,6 +192,87 @@ func New(opts Options) *fiber.App {
 	app.Post("/v1/groups/:id/join", requireAuth, func(c *fiber.Ctx) error { return joinGroup(c, opts.DB) })
 	app.Post("/v1/groups/:id/members/:userId/role", requireAuth, func(c *fiber.Ctx) error { return setGroupMemberRole(c, opts.DB) })
 	app.Post("/v1/groups/:id/bans/:userId", requireAuth, func(c *fiber.Ctx) error { return groupBanAction(c, opts.DB) })
+
+	// ── WebSocket for real-time messages ──────────────────
+	app.Use("/v1/messages/ws", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			// Extract user from query param token or header
+			uid := ""
+			if authVerifier != nil {
+				token := c.Query("token")
+				if token == "" {
+					token = strings.TrimPrefix(c.Get("Authorization"), "Bearer ")
+				}
+				if token != "" {
+					if claims, err := authVerifier.Verify(token); err == nil {
+						uid = claims.UUID
+					}
+				}
+			}
+			if uid == "" {
+				uid = c.Get("X-User-UUID")
+			}
+			if uid == "" {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "auth required"})
+			}
+			c.Locals("ws_user_id", uid)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
+	app.Get("/v1/messages/ws", websocket.New(func(conn *websocket.Conn) {
+		uid, _ := conn.Locals("ws_user_id").(string)
+		if uid == "" {
+			conn.Close()
+			return
+		}
+
+		ch := make(chan map[string]any, 64)
+
+		// Subscribe
+		messageSubscribersMu.Lock()
+		if messageSubscribers[uid] == nil {
+			messageSubscribers[uid] = map[chan map[string]any]struct{}{}
+		}
+		messageSubscribers[uid][ch] = struct{}{}
+		messageSubscribersMu.Unlock()
+
+		// Cleanup on disconnect
+		defer func() {
+			messageSubscribersMu.Lock()
+			delete(messageSubscribers[uid], ch)
+			if len(messageSubscribers[uid]) == 0 {
+				delete(messageSubscribers, uid)
+			}
+			messageSubscribersMu.Unlock()
+			close(ch)
+		}()
+
+		// Writer goroutine: forward events from channel to WebSocket
+		done := make(chan struct{})
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for evt := range ch {
+				data, err := json.Marshal(evt)
+				if err != nil {
+					continue
+				}
+				if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+					return
+				}
+			}
+		}()
+
+		// Reader: keep reading to detect disconnect (and handle pings)
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				break
+			}
+		}
+		<-done
+	}))
 
 	return app
 }

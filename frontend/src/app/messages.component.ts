@@ -1,9 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BehaviorSubject, Observable, Subject, combineLatest, interval, map, shareReplay, startWith, switchMap, takeUntil, tap } from 'rxjs';
 import { ApiService } from './api.service';
 import { UserAvatarComponent } from './user-avatar.component';
+import { WsService } from './ws.service';
 
 @Component({
   selector: 'app-messages',
@@ -24,7 +25,7 @@ export class MessagesComponent implements OnInit, OnDestroy {
   activeUserId$: Observable<string | null>;
   messages$: Observable<any[]>;
 
-  constructor(private api: ApiService) {
+  constructor(private api: ApiService, private ws: WsService, private cdr: ChangeDetectorRef) {
     this.threads$ = this.refreshThreads$.pipe(
       switchMap(() => this.api.listMessageThreads()),
       map((res) => res?.data || []),
@@ -33,13 +34,13 @@ export class MessagesComponent implements OnInit, OnDestroy {
 
     this.activeUserId$ = this.selectUser$.asObservable();
 
+    // Poll every 10s as fallback; WebSocket events trigger immediate refresh
     this.messages$ = combineLatest([this.activeUserId$]).pipe(
       switchMap(([userId]) => {
         if (!userId) {
           return new BehaviorSubject<any[]>([]);
         }
-        // Poll for updates every 3 seconds for near-realtime experience
-        return interval(3000).pipe(
+        return interval(10000).pipe(
           startWith(0),
           switchMap(() => this.api.listMessagesWith(userId)),
           map((res) => res?.data || [])
@@ -50,9 +51,8 @@ export class MessagesComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    // Initial load
     this.refreshThreads();
-    // Auto-select first thread when threads change
+    // Auto-select first thread
     this.threads$
       .pipe(
         takeUntil(this.destroy$),
@@ -65,11 +65,26 @@ export class MessagesComponent implements OnInit, OnDestroy {
         })
       )
       .subscribe();
+
+    // Connect WebSocket for real-time messages
+    const token = localStorage.getItem('accessToken') || undefined;
+    this.ws.connect(token);
+    this.ws.events.pipe(takeUntil(this.destroy$)).subscribe((evt) => {
+      // When a new message arrives via WS, refresh threads and messages
+      this.refreshThreads();
+      // Force messages observable to re-fetch for active user
+      const current = this.selectUser$.value;
+      if (current && (evt.sender_id === current || evt.recipient_id === current)) {
+        this.selectUser$.next(current);
+      }
+      this.cdr.markForCheck();
+    });
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    this.ws.disconnect();
   }
 
   refreshThreads() {

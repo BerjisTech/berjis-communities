@@ -26,7 +26,7 @@ func Load() Config {
 		Port:              getenv("PORT", "8088"),
 		DatabaseURL:       getenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5441/berjis_communities?sslmode=disable"),
 		CoreAPIBase:       getenv("CORE_API_BASE", "http://localhost:8080"),
-		AllowedOrigins:    getenv("ALLOWED_ORIGINS", "*"),
+		AllowedOrigins:    getenv("ALLOWED_ORIGINS", "https://communities.berjis.tech,https://berjis.tech"),
 		UploadsPublicBase: getenv("UPLOADS_PUBLIC_BASE", "/uploads"),
 	}
 }
